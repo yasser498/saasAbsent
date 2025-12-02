@@ -3,6 +3,7 @@ import React from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
+import SchoolLanding from './pages/SchoolLanding';
 import Submission from './pages/Submission';
 import Inquiry from './pages/Inquiry';
 import Login from './pages/admin/Login';
@@ -21,7 +22,7 @@ import StaffStudents from './pages/staff/Students';
 import StaffDeputy from './pages/staff/Deputy';
 import StaffObservations from './pages/staff/Observations';
 import GateScanner from './pages/staff/GateScanner'; 
-import ExitPermissions from './pages/staff/ExitPermissions'; // Import New Page
+import ExitPermissions from './pages/staff/ExitPermissions'; 
 import { StaffUser } from './types';
 
 const { HashRouter, Routes, Route, Navigate, useLocation } = ReactRouterDOM as any;
@@ -65,10 +66,7 @@ const AppContent = () => {
   const location = useLocation();
   
   // Determine Role Logic
-  // Admin Route: Starts with /admin AND isn't the login page
   const isAdminRoute = location.pathname.startsWith('/admin') && location.pathname !== '/admin/login';
-  
-  // Staff Route: Starts with /staff AND isn't the login page
   const isStaffRoute = location.pathname.startsWith('/staff') && location.pathname !== '/staff/login';
   
   let role: 'admin' | 'staff' | 'public' = 'public';
@@ -89,10 +87,11 @@ const AppContent = () => {
     <Layout role={role} onLogout={handleLogout}>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/s/:schoolCode" element={<SchoolLanding />} />
         <Route path="/submit" element={<Submission />} />
         <Route path="/inquiry" element={<Inquiry />} />
         
-        {/* Login Pages - Now inside Layout to allow navigation back to Home */}
+        {/* Login Pages */}
         <Route path="/admin/login" element={<Login />} />
         <Route path="/staff/login" element={<StaffLogin />} />
         

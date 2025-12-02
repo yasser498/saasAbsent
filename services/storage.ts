@@ -6,6 +6,9 @@ import {
 } from "../types";
 import { GoogleGenAI } from "@google/genai";
 
+// --- CONSTANTS ---
+export const MINISTRY_LOGO_URL = "https://www.raed.net/img?id=1474173"; // شعار وزارة التعليم
+
 // --- School Context Helpers ---
 export const getActiveSchoolId = (): string | null => {
     const school = localStorage.getItem('active_school');
@@ -25,6 +28,7 @@ export const setActiveSchool = (school: School) => {
     // Set legacy localStorage items for compatibility
     localStorage.setItem('school_name', school.name);
     if(school.logoUrl) localStorage.setItem('school_logo', school.logoUrl);
+    else localStorage.removeItem('school_logo');
 };
 
 export const logoutSchool = () => {
@@ -64,6 +68,11 @@ export const loginSchool = async (code: string): Promise<School | null> => {
         plan: data.plan, 
         createdAt: data.created_at 
     } as School;
+};
+
+// New Function to fetch public school info without full login logic if needed
+export const getSchoolByCodePublic = async (code: string): Promise<School | null> => {
+    return await loginSchool(code);
 };
 
 export const verifySchoolAdminPassword = async (schoolId: string, password: string): Promise<boolean> => {
@@ -156,7 +165,7 @@ const getCounselorName = async () => {
     return "الموجه الطلابي";
 };
 
-// ... AI Reports functions (unchanged mostly, but will use getCounselorName which is now safe) ...
+// ... AI Reports functions ...
 export const generateExecutiveReport = async (stats: any) => {
     const prompt = `
     بصفتك مستشاراً تربويًا وإداريًا خبيراً، قم بإعداد "تقرير تنفيذي شامل" لإدارة المدرسة بناءً على البيانات التالية:
@@ -352,7 +361,21 @@ export const analyzeSentiment = async (text: string): Promise<'positive' | 'nega
 // ... (Mappers unchanged) ...
 const mapStudentFromDB = (s: any): Student => ({ id: s.id, schoolId: s.school_id, name: s.name, studentId: s.student_id, grade: s.grade, className: s.class_name, phone: s.phone || '' });
 const mapStudentToDB = (s: Student) => ({ school_id: getActiveSchoolId(), name: s.name, student_id: s.studentId, grade: s.grade, class_name: s.className, phone: s.phone });
-const mapRequestFromDB = (r: any): ExcuseRequest => ({ id: r.id, schoolId: r.school_id, studentId: r.student_id, studentName: r.student_name, grade: r.grade, className: r.class_name, date: r.date, reason: r.reason, details: r.details, attachmentName: r.attachment_name, attachmentUrl: r.attachment_url, status: r.status as RequestStatus, submissionDate: r.submission_date });
+const mapRequestFromDB = (r: any): ExcuseRequest => ({ 
+    id: r.id, 
+    schoolId: r.school_id, 
+    studentId: r.student_id, 
+    studentName: r.student_name, 
+    grade: r.grade, 
+    className: r.class_name, 
+    date: r.date, 
+    reason: r.reason, 
+    details: r.details, 
+    attachmentName: r.attachment_name, 
+    attachmentUrl: r.attachment_url, 
+    status: r.status as RequestStatus, 
+    submissionDate: r.submission_date 
+});
 const mapRequestToDB = (r: ExcuseRequest) => ({ school_id: getActiveSchoolId(), student_id: r.studentId, student_name: r.studentName, grade: r.grade, class_name: r.className, date: r.date, reason: r.reason, details: r.details, attachment_name: r.attachmentName, attachment_url: r.attachmentUrl, status: r.status, submission_date: r.submissionDate });
 const mapStaffFromDB = (u: any): StaffUser => ({ id: u.id, schoolId: u.school_id, name: u.name, passcode: u.passcode, assignments: u.assignments || [], permissions: u.permissions || ['attendance', 'requests', 'reports'] });
 const mapStaffToDB = (u: StaffUser) => ({ school_id: getActiveSchoolId(), name: u.name, passcode: u.passcode, assignments: u.assignments || [], permissions: u.permissions || [] });
@@ -458,7 +481,8 @@ export const syncStudentsBatch = async (toAdd: Student[], toUpdate: Student[], t
     if (toDeleteIds.length) await supabase.from('students').delete().in('id', toDeleteIds);
     const upsertData = [...toAdd, ...toUpdate].map(mapStudentToDB);
     if (upsertData.length) {
-        const { error } = await supabase.from('students').upsert(upsertData, { onConflict: 'student_id' }); // Note: unique constraint might need to be (school_id, student_id)
+        // Correct conflict target for multi-tenancy
+        const { error } = await supabase.from('students').upsert(upsertData, { onConflict: 'school_id,student_id' }); 
         if (error) throw new Error(error.message);
     }
 };

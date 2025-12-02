@@ -12,11 +12,11 @@ const { useNavigate } = ReactRouterDOM as any;
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const [view, setView] = useState<'landing' | 'login' | 'register'>('landing');
+  const [view, setView] = useState<'landing' | 'find' | 'register'>('landing');
   
-  // Login State
+  // Find School State
   const [schoolCode, setSchoolCode] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Register State
@@ -25,22 +25,22 @@ const Home: React.FC = () => {
   const [regPassword, setRegPassword] = useState('');
   const [regLoading, setRegLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleFindSchool = async (e: React.FormEvent) => {
       e.preventDefault();
-      setLoginLoading(true);
+      setLoading(true);
       setError('');
       try {
           const school = await loginSchool(schoolCode.trim());
           if (school) {
               setActiveSchool(school);
-              navigate('/inquiry'); 
+              navigate(`/s/${school.schoolCode}`); 
           } else {
               setError('كود المدرسة غير صحيح.');
           }
       } catch (err) {
           setError('حدث خطأ في الاتصال.');
       } finally {
-          setLoginLoading(false);
+          setLoading(false);
       }
   };
 
@@ -52,8 +52,8 @@ const Home: React.FC = () => {
       try {
           const school = await registerSchool(regName, regCode, regPassword);
           setActiveSchool(school);
-          alert(`تم إنشاء مدرسة "${school.name}" بنجاح! كود الدخول هو: ${school.schoolCode}`);
-          navigate('/admin/login'); 
+          alert(`تم إنشاء مدرسة "${school.name}" بنجاح!`);
+          navigate(`/s/${school.schoolCode}`);
       } catch (err: any) {
           setError(err.message || 'فشل إنشاء المدرسة.');
       } finally {
@@ -89,7 +89,7 @@ const Home: React.FC = () => {
           <div className="flex gap-4">
               {view === 'landing' && (
                   <>
-                    <button onClick={() => setView('login')} className="text-sm font-bold text-slate-300 hover:text-white transition-colors">دخول المدرسة</button>
+                    <button onClick={() => setView('find')} className="text-sm font-bold text-slate-300 hover:text-white transition-colors">ابحث عن مدرستك</button>
                     <button onClick={() => setView('register')} className="bg-white text-slate-900 px-5 py-2.5 rounded-full text-sm font-bold hover:bg-slate-200 transition-colors">اشترك الآن</button>
                   </>
               )}
@@ -113,15 +113,15 @@ const Home: React.FC = () => {
                       <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">بلمسة واحدة</span>
                   </h1>
                   <p className="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">
-                      نظام "عذر" يتيح لأي مدرسة إنشاء نظامها الخاص في ثوانٍ. إدارة الغياب، السلوك، التواصل مع أولياء الأمور، والتحليل الذكي للبيانات في مكان واحد.
+                      أنشئ نظام مدرستك الخاص في ثوانٍ. بوابة موحدة للموظفين، الطلاب، وأولياء الأمور مع تحليلات ذكية.
                   </p>
                   
                   <div className="flex flex-wrap gap-4 justify-center pt-8">
                       <button onClick={() => setView('register')} className="group bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all hover:bg-blue-500 hover:scale-105 shadow-lg shadow-blue-600/30">
                           <Plus size={20}/> <span>سجل مدرستك مجاناً</span>
                       </button>
-                      <button onClick={() => setView('login')} className="group bg-white/10 text-white border border-white/10 px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all hover:bg-white/20 backdrop-blur-sm">
-                          <LogIn size={20}/> <span>دخول النظام</span>
+                      <button onClick={() => setView('find')} className="group bg-white/10 text-white border border-white/10 px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all hover:bg-white/20 backdrop-blur-sm">
+                          <Search size={20}/> <span>ابحث عن مدرستك</span>
                       </button>
                   </div>
 
@@ -133,9 +133,9 @@ const Home: React.FC = () => {
                           <p className="text-sm text-slate-400">متابعة الحضور والغياب والسلوك لحظياً مع إشعارات تلقائية.</p>
                       </div>
                       <div className="bg-white/5 border border-white/10 p-6 rounded-3xl hover:bg-white/10 transition-colors">
-                          <div className="bg-purple-500/20 w-12 h-12 rounded-xl flex items-center justify-center text-purple-400 mb-4"><Users size={24}/></div>
-                          <h3 className="font-bold text-lg mb-2">بوابة شاملة</h3>
-                          <p className="text-sm text-slate-400">تطبيق متكامل للإدارة، المعلمين، وأولياء الأمور.</p>
+                          <div className="bg-purple-500/20 w-12 h-12 rounded-xl flex items-center justify-center text-purple-400 mb-4"><Globe size={24}/></div>
+                          <h3 className="font-bold text-lg mb-2">رابط موحد</h3>
+                          <p className="text-sm text-slate-400">صفحة هبوط خاصة لكل مدرسة (YourSchool.com/s/Code).</p>
                       </div>
                       <div className="bg-white/5 border border-white/10 p-6 rounded-3xl hover:bg-white/10 transition-colors">
                           <div className="bg-pink-500/20 w-12 h-12 rounded-xl flex items-center justify-center text-pink-400 mb-4"><BarChart2 size={24}/></div>
@@ -146,25 +146,25 @@ const Home: React.FC = () => {
               </div>
           )}
 
-          {/* VIEW: LOGIN */}
-          {view === 'login' && (
+          {/* VIEW: FIND SCHOOL */}
+          {view === 'find' && (
               <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-3xl animate-fade-in shadow-2xl">
                   <div className="text-center mb-8">
                       <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/40">
                           <School size={32} className="text-white"/>
                       </div>
-                      <h2 className="text-2xl font-bold">تسجيل دخول المدرسة</h2>
-                      <p className="text-slate-400 text-sm mt-1">أدخل كود المدرسة للوصول إلى النظام</p>
+                      <h2 className="text-2xl font-bold">ابحث عن مدرستك</h2>
+                      <p className="text-slate-400 text-sm mt-1">أدخل كود المدرسة للذهاب لصفحتها الرئيسية</p>
                   </div>
 
-                  <form onSubmit={handleLogin} className="space-y-6">
+                  <form onSubmit={handleFindSchool} className="space-y-6">
                       <div>
                           <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">كود المدرسة</label>
                           <div className="relative">
                               <input 
                                   value={schoolCode}
                                   onChange={e => setSchoolCode(e.target.value)}
-                                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-4 px-4 pl-12 text-center font-mono text-xl font-bold tracking-widest outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-600"
+                                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-4 px-4 pl-12 text-center font-mono text-xl font-bold tracking-widest outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-600 uppercase"
                                   placeholder="CODE"
                                   autoFocus
                               />
@@ -174,8 +174,8 @@ const Home: React.FC = () => {
 
                       {error && <p className="text-red-400 text-sm text-center bg-red-500/10 py-2 rounded-lg">{error}</p>}
 
-                      <button disabled={loginLoading} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
-                          {loginLoading ? 'جاري البحث...' : 'دخول'}
+                      <button disabled={loading} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                          {loading ? 'جاري البحث...' : 'الذهاب للمدرسة'}
                       </button>
                   </form>
               </div>
@@ -227,7 +227,7 @@ const Home: React.FC = () => {
                       </div>
 
                       <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-xs text-emerald-200">
-                          <p>💡 <strong>كود الدخول</strong> هو الرمز الذي سيستخدمه الطلاب والمعلمون للدخول لنظام مدرستك. اختر رمزاً مميزاً وسهلاً (مثال: ZENKI).</p>
+                          <p>سيكون رابط مدرستك: <strong>YourApp.com/s/{regCode || 'CODE'}</strong></p>
                       </div>
 
                       {error && <p className="text-red-400 text-sm text-center bg-red-500/10 py-2 rounded-lg">{error}</p>}

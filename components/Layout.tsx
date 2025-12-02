@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
-import { Home, FileText, Search, ShieldCheck, LogOut, Menu, X, Users, ClipboardCheck, BarChart2, MessageSquare, BookUser, LayoutGrid, Briefcase, ChevronLeft, ChevronRight, Settings, Sparkles, UserCircle, ScanLine, LogOut as ExitIcon, Download, Share, BellRing, Loader2 } from 'lucide-react';
+import { Home, FileText, Search, ShieldCheck, LogOut, Menu, X, Users, ClipboardCheck, BarChart2, MessageSquare, BookUser, LayoutGrid, Briefcase, ChevronLeft, ChevronRight, Settings, Sparkles, UserCircle, ScanLine, LogOut as ExitIcon, Download, Share, BellRing, Loader2, School as SchoolIcon } from 'lucide-react';
 import { StaffUser, AppNotification, School } from '../types';
 import { getPendingRequestsCountForStaff, getNotifications, getParentChildren, createNotification, getActiveSchool, logoutSchool, getActiveSchoolId } from '../services/storage';
 import ChatBot from './ChatBot';
@@ -46,13 +46,15 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
       const school = getActiveSchool();
       setActiveSchool(school);
       
-      // If we are NOT on the home page (landing) AND no school is active, redirect to home
-      if (location.pathname !== '/' && !school) {
+      // Allow /s/:code and / without redirecting
+      const isPublicRoute = location.pathname === '/' || location.pathname.startsWith('/s/');
+      
+      if (!isPublicRoute && !school) {
           navigate('/');
       }
   }, [location.pathname]);
 
-  const SCHOOL_LOGO = activeSchool?.logoUrl || "https://www.raed.net/img?id=1471924";
+  const SCHOOL_LOGO = activeSchool?.logoUrl || null;
   const SCHOOL_NAME = activeSchool?.name || "نظام عذر المدرسي";
 
   // Close mobile menu when route changes
@@ -125,7 +127,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
          navigator.serviceWorker.ready.then(registration => {
             registration.showNotification("تم تفعيل الإشعارات", {
                 body: "ستصلك التنبيهات المدرسية هنا فوراً.",
-                icon: SCHOOL_LOGO
+                icon: SCHOOL_LOGO || '/vite.svg'
             });
          });
       }
@@ -184,8 +186,8 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
                             const title = newNotif.title;
                             const options: NotificationOptions = {
                                 body: newNotif.message,
-                                icon: SCHOOL_LOGO,
-                                badge: SCHOOL_LOGO, // Android small icon
+                                icon: SCHOOL_LOGO || undefined,
+                                badge: SCHOOL_LOGO || undefined, // Android small icon
                                 tag: 'school-alert', // Grouping
                                 // @ts-ignore
                                 renotify: true,
@@ -252,8 +254,8 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
   const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed);
   const showChatBot = ['/inquiry', '/staff/home', '/admin/dashboard'].includes(location.pathname);
 
-  // If on Landing Page, don't show the layout (Sidebar etc)
-  if (location.pathname === '/') {
+  // If on Landing Page or School Landing, don't show the layout
+  if (location.pathname === '/' || location.pathname.startsWith('/s/')) {
       return <>{children}</>;
   }
 
@@ -316,7 +318,11 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
       {/* Mobile Header */}
       <div className="md:hidden bg-white/80 backdrop-blur-md border-b p-4 flex justify-between items-center sticky top-0 z-50 shadow-sm shrink-0 h-16">
         <div className="flex items-center gap-3 font-bold text-slate-800 text-sm">
-          <img src={SCHOOL_LOGO} alt="Logo" className="w-8 h-8 object-contain" />
+          {SCHOOL_LOGO ? (
+              <img src={SCHOOL_LOGO} alt="Logo" className="w-8 h-8 object-contain" />
+          ) : (
+              <SchoolIcon size={24} className="text-blue-600"/>
+          )}
           <span className="text-blue-900 truncate max-w-[200px]">{SCHOOL_NAME}</span>
         </div>
         <button 
@@ -354,7 +360,13 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
         <div className={`p-6 hidden md:flex flex-col items-center text-center gap-3 shrink-0 transition-all ${isSidebarCollapsed ? 'py-6 px-2' : ''}`}>
           <div className="relative group cursor-pointer">
              <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 rounded-full group-hover:opacity-30 transition-opacity"></div>
-             <img src={SCHOOL_LOGO} alt="School Logo" className={`relative object-contain drop-shadow-md transition-all duration-500 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-24 h-24 group-hover:scale-105'}`} />
+             {SCHOOL_LOGO ? (
+                 <img src={SCHOOL_LOGO} alt="School Logo" className={`relative object-contain drop-shadow-md transition-all duration-500 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-24 h-24 group-hover:scale-105'}`} />
+             ) : (
+                 <div className={`relative bg-blue-100 rounded-full flex items-center justify-center text-blue-600 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-24 h-24'}`}>
+                     <SchoolIcon size={isSidebarCollapsed ? 20 : 40}/>
+                 </div>
+             )}
           </div>
           {!isSidebarCollapsed && (
             <div className="animate-fade-in">

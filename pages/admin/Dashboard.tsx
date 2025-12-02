@@ -315,13 +315,13 @@ const Dashboard: React.FC = () => {
       } catch (e) { alert("حدث خطأ."); } finally { setIsTriggeringSmart(false); }
   };
 
-  const copyStaffLink = () => {
+  const copySchoolLink = () => {
       if (!activeSchool) return;
-      // Construct link: base_url + /staff/login?code=CODE
+      // New format: base_url + /s/CODE
       const baseUrl = window.location.origin + window.location.pathname.replace('/admin/dashboard', '');
-      const link = `${baseUrl}#/staff/login?code=${activeSchool.schoolCode}`;
+      const link = `${baseUrl}#/s/${activeSchool.schoolCode}`;
       navigator.clipboard.writeText(link);
-      alert("تم نسخ رابط دخول المعلمين! يمكنك إرساله في القروب الآن.");
+      alert("تم نسخ رابط المدرسة الموحد! يمكنك إرساله للمعلمين وأولياء الأمور.");
   };
 
   // --- RENDERERS ---
@@ -685,13 +685,13 @@ const Dashboard: React.FC = () => {
                   </div>
               </div>
 
-              {/* NEW: SHARE STAFF LINK CARD */}
+              {/* NEW: SHARE SCHOOL LINK CARD */}
               <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-8 rounded-3xl border border-emerald-100">
-                  <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-2"><LinkIcon className="text-emerald-600"/> رابط دخول المعلمين الذكي</h2>
+                  <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-2"><LinkIcon className="text-emerald-600"/> رابط المدرسة الموحد</h2>
                   <p className="text-sm text-emerald-700 mb-6 leading-relaxed">
-                      بدلاً من أن يضطر المعلم لإدخال "كود المدرسة" في كل مرة، انسخ هذا الرابط وأرسله في مجموعة المعلمين (واتساب). عند الضغط عليه، سيتم توجيههم مباشرة لمدرستك.
+                      هذا الرابط يتيح للجميع (معلمين، طلاب، أولياء أمور) الوصول لصفحة مدرستك الرئيسية دون الحاجة لإدخال كود المدرسة.
                   </p>
-                  <button onClick={copyStaffLink} className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-100 shadow-sm transition-all">
+                  <button onClick={copySchoolLink} className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-100 shadow-sm transition-all">
                       <Copy size={18}/> نسخ الرابط للمشاركة
                   </button>
               </div>

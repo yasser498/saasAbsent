@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Briefcase, AlertTriangle, Plus, Search, Loader2, X, Send, Sparkles, 
@@ -26,7 +27,9 @@ import {
   generateSmartContent,
   getStudentObservations,
   updateStudentObservation,
-  deleteStudentObservation
+  deleteStudentObservation,
+  getActiveSchool,
+  MINISTRY_LOGO_URL
 } from '../../services/storage';
 import { Student, BehaviorRecord, StaffUser, Referral, StudentObservation } from '../../types';
 import { BEHAVIOR_VIOLATIONS, GRADES } from '../../constants';
@@ -34,7 +37,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import AttendanceMonitor from './AttendanceMonitor';
 
 // --- Official Header Component (Print Only) ---
-const OfficialHeader = ({ schoolName, subTitle }: { schoolName: string, subTitle: string }) => (
+const OfficialHeader = ({ schoolName, subTitle, schoolLogo }: { schoolName: string, subTitle: string, schoolLogo?: string }) => (
   <div className="print-header">
     <div className="print-header-right">
         <p>المملكة العربية السعودية</p>
@@ -43,12 +46,10 @@ const OfficialHeader = ({ schoolName, subTitle }: { schoolName: string, subTitle
         <p>{schoolName}</p>
         <p>{subTitle}</p>
     </div>
-    <div className="print-header-center">
-        <img
-          src="https://www.raed.net/img?id=1474173"
-          alt="شعار وزارة التعليم"
-          className="print-logo"
-        />
+    <div className="print-header-center flex flex-col items-center">
+        {/* Always show Ministry Logo as primary, School Logo underneath or side if exists */}
+        <img src={MINISTRY_LOGO_URL} alt="وزارة التعليم" className="print-logo h-20 mb-2" />
+        {schoolLogo && <img src={schoolLogo} alt={schoolName} className="h-12 object-contain" />}
     </div>
     <div className="print-header-left">
          <p>Kingdom of Saudi Arabia</p>
@@ -63,7 +64,9 @@ const OfficialHeader = ({ schoolName, subTitle }: { schoolName: string, subTitle
 
 const StaffDeputy: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
-  const SCHOOL_NAME = localStorage.getItem('school_name') || "مدرسة عماد الدين زنكي المتوسطة";
+  const activeSchool = getActiveSchool();
+  const SCHOOL_NAME = activeSchool?.name || "المدرسة";
+  const SCHOOL_LOGO = activeSchool?.logoUrl;
   
   // Navigation View State
   const [activeView, setActiveView] = useState<'dashboard' | 'attendance' | 'referrals' | 'log' | 'positive'>('dashboard');
@@ -409,11 +412,11 @@ const StaffDeputy: React.FC = () => {
     <>
       <div id="print-container" className="hidden print:block text-[14px] leading-relaxed" dir="rtl">
         <div className="print-page-a4">
-            <img src="https://www.raed.net/img?id=1474173" className="print-watermark" alt="Watermark" />
+            <img src={MINISTRY_LOGO_URL} className="print-watermark" alt="Watermark" />
             
             {(printMode === 'commitment' || printMode === 'summons') && recordToPrint && (
             <div>
-                <OfficialHeader schoolName={SCHOOL_NAME} subTitle="وكالة شؤون الطلاب" />
+                <OfficialHeader schoolName={SCHOOL_NAME} subTitle="وكالة شؤون الطلاب" schoolLogo={SCHOOL_LOGO} />
                 <div className="mt-8 px-4 relative z-10">
                     <h1 className="official-title">{printMode === 'commitment' ? 'تعهد خطي (انضباطي)' : 'خطاب استدعاء ولي أمر'}</h1>
                     {printMode === 'commitment' ? (
@@ -440,7 +443,7 @@ const StaffDeputy: React.FC = () => {
 
             {printMode === 'certificate' && studentToPrint && certificateData && (
                 <div className="h-full flex flex-col pt-10">
-                    <OfficialHeader schoolName={SCHOOL_NAME} subTitle="" />
+                    <OfficialHeader schoolName={SCHOOL_NAME} subTitle="" schoolLogo={SCHOOL_LOGO} />
                     <div className="flex-1 flex flex-col items-center justify-center text-center relative z-10">
                         <h1 className="text-4xl font-extrabold mb-4">شهادة شكر وتقدير</h1>
                         <p className="text-xl mb-6">تسر إدارة المدرسة أن تتقدم بالشكر للطالب:</p>
