@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, Save, Smartphone, Hash, FileSpreadsheet } from 'lucide-react';
 import { getStudents, syncStudentsBatch, getStudentsSync, addStudent, deleteStudent, updateStudent } from '../../services/storage';
@@ -174,9 +175,8 @@ const Students: React.FC = () => {
   };
 
   const mapNumericClass = (val: string | number): string => {
-      const v = val.toString().trim();
-      const map: Record<string, string> = { '1': 'أ', '2': 'ب', '3': 'ج', '4': 'د', '5': 'هـ', '6': 'و' };
-      return map[v] || v;
+      // Return original value without conversion to letters
+      return val.toString().trim();
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,7 +209,7 @@ const Students: React.FC = () => {
         // Keywords to search for
         const nameKeywords = ['اسم الطالب', 'الطالب', 'Name', 'الاسم'];
         // Added 'رقم الطالب' based on your image
-        const idKeywords = ['رقم الهوية', 'السجل المدني', 'ID', 'الهوية', 'سجل', 'رقم الطالب'];
+        const idKeywords = ['رقم الهوية', 'السجل المدني', 'ID', 'الهوية', 'سجل', 'رقم الطالب', 'رقم السجل'];
         const gradeKeywords = ['رمز الصف', 'الصف', 'Grade', 'المرحلة', 'رقم الصف'];
         const classKeywords = ['الفصل', 'Class', 'الشعبة'];
         const phoneKeywords = ['جوال', 'الجوال', 'Phone', 'رقم الجوال'];
@@ -225,8 +225,18 @@ const Students: React.FC = () => {
 
             for (let c = 0; c < row.length; c++) {
                 const cell = row[c]?.toString().trim() || '';
-                if (nameKeywords.some(k => cell.includes(k))) tempNameIdx = c;
-                if (idKeywords.some(k => cell.includes(k))) tempIdIdx = c;
+                
+                // Prioritize ID detection to avoid "رقم الطالب" being detected as Name
+                let isId = false;
+                if (idKeywords.some(k => cell.includes(k))) {
+                    tempIdIdx = c;
+                    isId = true;
+                }
+                
+                // Only check for Name if not identified as ID
+                if (!isId && nameKeywords.some(k => cell.includes(k))) {
+                    tempNameIdx = c;
+                }
             }
 
             // If we found both Name and ID in this row, treat it as header
@@ -272,7 +282,6 @@ const Students: React.FC = () => {
                 // Get Class
                 let className = CLASSES[0];
                 if (classIdx !== -1 && row[classIdx]) {
-                    // Convert "1" to "أ" if needed
                     className = mapNumericClass(row[classIdx]);
                 }
 
