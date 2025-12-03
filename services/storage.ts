@@ -1237,3 +1237,32 @@ export const sendPendingReferralReminders = async () => {
     }
     return { success: false, message: 'لم يتم العثور على موجهين/وكلاء لإرسال التنبيه.' };
 };
+
+// --- NEW RESET FUNCTION ---
+export const resetSchoolSystem = async () => {
+    const schoolId = getActiveSchoolId();
+    if (!schoolId) return;
+
+    // Delete in order to avoid foreign key constraints (if any)
+    await Promise.all([
+        supabase.from('notifications').delete().eq('school_id', schoolId),
+        supabase.from('student_points').delete().eq('school_id', schoolId),
+        supabase.from('class_performance').delete().eq('school_id', schoolId),
+        supabase.from('attendance').delete().eq('school_id', schoolId),
+        supabase.from('behaviors').delete().eq('school_id', schoolId),
+        supabase.from('observations').delete().eq('school_id', schoolId),
+        supabase.from('referrals').delete().eq('school_id', schoolId),
+        supabase.from('requests').delete().eq('school_id', schoolId),
+        supabase.from('guidance_sessions').delete().eq('school_id', schoolId),
+        supabase.from('admin_insights').delete().eq('school_id', schoolId),
+        supabase.from('news').delete().eq('school_id', schoolId),
+        supabase.from('appointments').delete().eq('school_id', schoolId),
+        supabase.from('appointment_slots').delete().eq('school_id', schoolId),
+        supabase.from('exit_permissions').delete().eq('school_id', schoolId),
+        supabase.from('risk_actions').delete().eq('school_id', schoolId),
+        supabase.from('parent_links').delete().eq('school_id', schoolId),
+    ]);
+
+    // Finally students (keeping Staff and School account)
+    await supabase.from('students').delete().eq('school_id', schoolId);
+};

@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { 
@@ -15,7 +14,8 @@ import {
   getAdminInsights, sendAdminInsight,
   sendBatchNotifications,
   getActiveSchool,
-  updateSchoolManager
+  updateSchoolManager,
+  resetSchoolSystem // Import reset function
 } from '../../services/storage';
 import { ExcuseRequest, Student, BehaviorRecord, AttendanceRecord, SchoolNews, Appointment, AppointmentSlot, StaffUser, ExitPermission, AdminInsight } from '../../types';
 
@@ -54,6 +54,9 @@ const Dashboard: React.FC = () => {
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
   const [isSendingNotif, setIsSendingNotif] = useState(false);
+
+  // Reset System State
+  const [isResetting, setIsResetting] = useState(false);
 
   const [apptDate, setApptDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -178,6 +181,23 @@ const Dashboard: React.FC = () => {
       const link = `${baseUrl}#/s/${activeSchool.schoolCode}`;
       navigator.clipboard.writeText(link);
       alert("تم نسخ رابط المدرسة الموحد!");
+  };
+
+  const handleResetSystem = async () => {
+      if (window.confirm("تحذير: هل أنت متأكد من تصفير النظام بالكامل؟ سيتم حذف جميع بيانات الطلاب والحضور والسلوك والإحصائيات نهائياً. لا يمكن التراجع عن هذا الإجراء.")) {
+          if (window.confirm("تأكيد نهائي: هل تريد حقاً حذف كل شيء؟")) {
+              setIsResetting(true);
+              try {
+                  await resetSchoolSystem();
+                  alert("تم تصفير النظام بنجاح.");
+                  window.location.reload(); // Refresh to clear local state
+              } catch (e) {
+                  alert("حدث خطأ أثناء التصفير. يرجى المحاولة مرة أخرى.");
+              } finally {
+                  setIsResetting(false);
+              }
+          }
+      }
   };
 
   const StatCard = ({ title, value, icon: Icon, color }: any) => (
@@ -400,8 +420,8 @@ const Dashboard: React.FC = () => {
               <div className="bg-white border-2 border-red-50 p-6 rounded-[2rem]">
                   <h3 className="font-bold text-red-900 flex items-center gap-2 mb-4"><AlertTriangle size={20} className="text-red-500"/> منطقة الخطر</h3>
                   <p className="text-xs text-slate-500 mb-4">الإجراءات هنا لا يمكن التراجع عنها. يرجى الحذر.</p>
-                  <button onClick={() => alert("يرجى التواصل مع الدعم الفني لحذف البيانات بالكامل.")} className="w-full border-2 border-red-100 text-red-600 py-3 rounded-xl font-bold hover:bg-red-50 transition-colors">
-                      تصفير النظام بالكامل
+                  <button onClick={handleResetSystem} disabled={isResetting} className="w-full border-2 border-red-100 text-red-600 py-3 rounded-xl font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
+                      {isResetting ? <Loader2 className="animate-spin"/> : 'تصفير النظام بالكامل'}
                   </button>
               </div>
           </div>

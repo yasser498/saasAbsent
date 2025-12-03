@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, Save, Smartphone, Hash, FileSpreadsheet } from 'lucide-react';
 import { getStudents, syncStudentsBatch, getStudentsSync, addStudent, deleteStudent, updateStudent } from '../../services/storage';
@@ -174,6 +173,12 @@ const Students: React.FC = () => {
     return mapping[c] || c; // Return mapped name or original if not found
   };
 
+  const mapNumericClass = (val: string | number): string => {
+      const v = val.toString().trim();
+      const map: Record<string, string> = { '1': 'أ', '2': 'ب', '3': 'ج', '4': 'د', '5': 'هـ', '6': 'و' };
+      return map[v] || v;
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -184,43 +189,69 @@ const Students: React.FC = () => {
         const arrayBuffer = await file.arrayBuffer();
         const wb = XLSX.read(arrayBuffer, { type: 'array' });
         
-        // Target Sheet2 if available (index 1), otherwise Sheet1 (index 0)
+        // Try Sheet2 first as per your image, else Sheet1
         const sheetName = wb.SheetNames.length > 1 ? wb.SheetNames[1] : wb.SheetNames[0];
         const sheet = wb.Sheets[sheetName];
         
         // Convert to JSON (Array of Arrays) to handle rows manually
-        // header: 1 gives us raw arrays like [['A','B'], ['1','2']]
         const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         
-        if (rawData.length < 4) { alert("الملف لا يحتوي على بيانات كافية (تأكد من الهيكلة)."); return; }
+        if (rawData.length < 2) { alert("الملف لا يحتوي على بيانات كافية."); return; }
 
-        // Logic:
-        // 1. Skip first 3 rows (Indices 0, 1, 2)
-        // 2. Row 4 (Index 3) contains Headers
-        // 3. Skip first column (Index 0 of each row)
-        
-        const headerRow = rawData[3]; // Row 4 is index 3
-        const dataRows = rawData.slice(4); // Data starts from Row 5 (index 4)
+        // --- SMART HEADER DETECTION ---
+        let headerRowIndex = -1;
+        let nameIdx = -1;
+        let idIdx = -1;
+        let gradeIdx = -1;
+        let classIdx = -1;
+        let phoneIdx = -1;
 
-        // Find indices dynamically based on header names (Starting search from index 1 to skip first col)
-        const findColIndex = (keywords: string[]) => {
-            for (let i = 1; i < headerRow.length; i++) {
-                const cell = headerRow[i]?.toString().trim() || '';
-                if (keywords.some(k => cell.includes(k))) return i;
+        // Keywords to search for
+        const nameKeywords = ['اسم الطالب', 'الطالب', 'Name', 'الاسم'];
+        // Added 'رقم الطالب' based on your image
+        const idKeywords = ['رقم الهوية', 'السجل المدني', 'ID', 'الهوية', 'سجل', 'رقم الطالب'];
+        const gradeKeywords = ['رمز الصف', 'الصف', 'Grade', 'المرحلة', 'رقم الصف'];
+        const classKeywords = ['الفصل', 'Class', 'الشعبة'];
+        const phoneKeywords = ['جوال', 'الجوال', 'Phone', 'رقم الجوال'];
+
+        // Scan first 20 rows to find header
+        for (let r = 0; r < Math.min(rawData.length, 20); r++) {
+            const row = rawData[r];
+            if (!row || !Array.isArray(row)) continue;
+
+            // Check columns in this row
+            let tempNameIdx = -1;
+            let tempIdIdx = -1;
+
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c]?.toString().trim() || '';
+                if (nameKeywords.some(k => cell.includes(k))) tempNameIdx = c;
+                if (idKeywords.some(k => cell.includes(k))) tempIdIdx = c;
             }
-            return -1;
-        };
 
-        const nameIdx = findColIndex(['اسم الطالب', 'الطالب', 'Name']);
-        const idIdx = findColIndex(['رقم الهوية', 'السجل المدني', 'ID']);
-        const gradeIdx = findColIndex(['رمز الصف', 'الصف', 'Grade']);
-        const classIdx = findColIndex(['الفصل', 'Class']);
-        const phoneIdx = findColIndex(['جوال', 'الجوال', 'Phone']);
+            // If we found both Name and ID in this row, treat it as header
+            if (tempNameIdx !== -1 && tempIdIdx !== -1) {
+                headerRowIndex = r;
+                nameIdx = tempNameIdx;
+                idIdx = tempIdIdx;
+                
+                // Search other optional cols in this row
+                for (let c = 0; c < row.length; c++) {
+                    const cell = row[c]?.toString().trim() || '';
+                    if (gradeIdx === -1 && gradeKeywords.some(k => cell.includes(k))) gradeIdx = c;
+                    if (classIdx === -1 && classKeywords.some(k => cell.includes(k))) classIdx = c;
+                    if (phoneIdx === -1 && phoneKeywords.some(k => cell.includes(k))) phoneIdx = c;
+                }
+                break;
+            }
+        }
 
-        if (nameIdx === -1 || idIdx === -1) {
-            alert("لم يتم العثور على أعمدة 'اسم الطالب' أو 'رقم الهوية' في الصف الرابع.");
+        if (headerRowIndex === -1) {
+            alert("لم يتم العثور على رأس الجدول. تأكد من وجود أعمدة باسم 'اسم الطالب' و 'رقم الهوية' أو 'رقم الطالب'.");
             return;
         }
+
+        const dataRows = rawData.slice(headerRowIndex + 1);
 
         const toUpsert: Student[] = [];
         dataRows.forEach((row: any[]) => {
@@ -241,8 +272,8 @@ const Students: React.FC = () => {
                 // Get Class
                 let className = CLASSES[0];
                 if (classIdx !== -1 && row[classIdx]) {
-                    // Extract class number/letter if formatted weirdly
-                    className = row[classIdx].toString().trim();
+                    // Convert "1" to "أ" if needed
+                    className = mapNumericClass(row[classIdx]);
                 }
 
                 // Get Phone
@@ -264,7 +295,7 @@ const Students: React.FC = () => {
 
         if (toUpsert.length === 0) { alert("لا توجد بيانات صالحة للاستيراد."); return; }
         
-        if (window.confirm(`تم العثور على ${toUpsert.length} طالب من نظام نور. هل تريد استيرادهم؟`)) {
+        if (window.confirm(`تم العثور على ${toUpsert.length} طالب. هل تريد استيرادهم؟`)) {
             await syncStudentsBatch(toUpsert, [], []); 
             await fetchStudents(true); 
             alert("تمت عملية الاستيراد بنجاح!");
