@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, Save, Smartphone, Hash, GraduationCap } from 'lucide-react';
+import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, Save, Smartphone, Hash, FileSpreadsheet } from 'lucide-react';
 import { getStudents, syncStudentsBatch, getStudentsSync, addStudent, deleteStudent, updateStudent } from '../../services/storage';
 import { Student } from '../../types';
 import { GRADES, CLASSES } from '../../constants';
@@ -150,14 +150,28 @@ const Students: React.FC = () => {
     }
   };
 
-  // --- Excel Logic ---
-  const mapCodeToGrade = (code: string | number): string => {
-    const c = code ? code.toString().trim() : '';
-    if (c === '725' || c === '0725') return 'الأول متوسط';
-    if (c === '825' || c === '0825') return 'الثاني متوسط';
-    if (c === '925' || c === '0925') return 'الثالث متوسط';
-    if (GRADES.includes(c)) return c;
-    return ''; 
+  // --- Excel Logic (Updated for Noor System) ---
+  const mapNoorGrade = (code: string | number): string => {
+    // Normalize code to string and pad with leading zero if needed
+    let c = code ? code.toString().trim() : '';
+    if (c.length === 3) c = '0' + c; // e.g. 725 -> 0725
+
+    const mapping: Record<string, string> = {
+        '0140': 'الأول الابتدائي',
+        '0240': 'الثاني الابتدائي',
+        '0340': 'الثالث الابتدائي',
+        '0440': 'الرابع الابتدائي',
+        '0540': 'الخامس الابتدائي',
+        '0640': 'السادس الابتدائي',
+        '0725': 'الأول متوسط',
+        '0825': 'الثاني متوسط',
+        '0925': 'الثالث متوسط',
+        '1314': 'الأول ثانوي',
+        '1416': 'الثاني ثانوي',
+        '1516': 'الثالث ثانوي'
+    };
+
+    return mapping[c] || c; // Return mapped name or original if not found
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,38 +183,93 @@ const Students: React.FC = () => {
     try {
         const arrayBuffer = await file.arrayBuffer();
         const wb = XLSX.read(arrayBuffer, { type: 'array' });
-        const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
         
-        if (data.length === 0) { alert("الملف فارغ!"); return; }
+        // Target Sheet2 if available (index 1), otherwise Sheet1 (index 0)
+        const sheetName = wb.SheetNames.length > 1 ? wb.SheetNames[1] : wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        
+        // Convert to JSON (Array of Arrays) to handle rows manually
+        // header: 1 gives us raw arrays like [['A','B'], ['1','2']]
+        const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        if (rawData.length < 4) { alert("الملف لا يحتوي على بيانات كافية (تأكد من الهيكلة)."); return; }
+
+        // Logic:
+        // 1. Skip first 3 rows (Indices 0, 1, 2)
+        // 2. Row 4 (Index 3) contains Headers
+        // 3. Skip first column (Index 0 of each row)
+        
+        const headerRow = rawData[3]; // Row 4 is index 3
+        const dataRows = rawData.slice(4); // Data starts from Row 5 (index 4)
+
+        // Find indices dynamically based on header names (Starting search from index 1 to skip first col)
+        const findColIndex = (keywords: string[]) => {
+            for (let i = 1; i < headerRow.length; i++) {
+                const cell = headerRow[i]?.toString().trim() || '';
+                if (keywords.some(k => cell.includes(k))) return i;
+            }
+            return -1;
+        };
+
+        const nameIdx = findColIndex(['اسم الطالب', 'الطالب', 'Name']);
+        const idIdx = findColIndex(['رقم الهوية', 'السجل المدني', 'ID']);
+        const gradeIdx = findColIndex(['رمز الصف', 'الصف', 'Grade']);
+        const classIdx = findColIndex(['الفصل', 'Class']);
+        const phoneIdx = findColIndex(['جوال', 'الجوال', 'Phone']);
+
+        if (nameIdx === -1 || idIdx === -1) {
+            alert("لم يتم العثور على أعمدة 'اسم الطالب' أو 'رقم الهوية' في الصف الرابع.");
+            return;
+        }
 
         const toUpsert: Student[] = [];
-        data.forEach((row: any) => {
-            const name = row['الاسم'] || row['name'] || row['Name'];
-            const studentIdRaw = row['السجل المدني'] || row['الهوية'] || row['studentId'] || row['ID'];
-            const gradeRaw = row['الصف'] || row['grade'] || row['Grade'];
-            const classRaw = row['الفصل'] || row['className'] || row['Class'];
-            const phone = row['الجوال'] || row['رقم الجوال'] || row['phone'] || '';
+        dataRows.forEach((row: any[]) => {
+            // Check if row has data (valid ID)
+            const rawId = row[idIdx];
+            const rawName = row[nameIdx];
 
-            if (name && studentIdRaw) {
+            if (rawId && rawName) {
+                const studentId = rawId.toString().trim();
+                const name = rawName.toString().trim();
+                
+                // Get Grade
+                let grade = GRADES[0];
+                if (gradeIdx !== -1 && row[gradeIdx]) {
+                    grade = mapNoorGrade(row[gradeIdx]);
+                }
+
+                // Get Class
+                let className = CLASSES[0];
+                if (classIdx !== -1 && row[classIdx]) {
+                    // Extract class number/letter if formatted weirdly
+                    className = row[classIdx].toString().trim();
+                }
+
+                // Get Phone
+                let phone = '';
+                if (phoneIdx !== -1 && row[phoneIdx]) {
+                    phone = row[phoneIdx].toString().trim();
+                }
+
                 toUpsert.push({
-                    id: '',
-                    name: name.toString().trim(),
-                    studentId: studentIdRaw.toString().trim(),
-                    grade: mapCodeToGrade(gradeRaw) || GRADES[0],
-                    className: classRaw ? classRaw.toString().trim() : CLASSES[0],
-                    phone: phone.toString().trim()
+                    id: '', // Generated by DB
+                    name,
+                    studentId,
+                    grade,
+                    className,
+                    phone
                 });
             }
         });
 
-        if (toUpsert.length === 0) { alert("لا توجد بيانات صالحة."); return; }
+        if (toUpsert.length === 0) { alert("لا توجد بيانات صالحة للاستيراد."); return; }
         
-        if (window.confirm(`سيتم معالجة ${toUpsert.length} طالب. متابعة؟`)) {
+        if (window.confirm(`تم العثور على ${toUpsert.length} طالب من نظام نور. هل تريد استيرادهم؟`)) {
             await syncStudentsBatch(toUpsert, [], []); 
             await fetchStudents(true); 
-            alert("تمت العملية بنجاح!");
+            alert("تمت عملية الاستيراد بنجاح!");
         }
-    } catch (error: any) { alert(`خطأ: ${error.message}`); } finally { setProcessingFile(false); e.target.value = ''; }
+    } catch (error: any) { alert(`خطأ أثناء معالجة الملف: ${error.message}`); } finally { setProcessingFile(false); e.target.value = ''; }
   };
 
   const inputClasses = "w-full p-3 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none transition-all font-bold text-sm";
@@ -223,7 +292,7 @@ const Students: React.FC = () => {
            <div className="relative">
              <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" id="excel-upload" disabled={processingFile} />
              <label htmlFor="excel-upload" className={`flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl hover:bg-emerald-700 font-bold text-sm shadow-lg shadow-emerald-600/20 cursor-pointer ${processingFile ? 'opacity-50' : ''}`}>
-                {processingFile ? <Loader2 className="animate-spin" size={18} /> : <div className="flex items-center gap-2"><div className="bg-white/20 p-1 rounded"><Plus size={12}/></div> استيراد Excel</div>}
+                {processingFile ? <Loader2 className="animate-spin" size={18} /> : <div className="flex items-center gap-2"><div className="bg-white/20 p-1 rounded"><FileSpreadsheet size={12}/></div> استيراد نور</div>}
              </label>
            </div>
         </div>

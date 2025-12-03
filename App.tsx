@@ -23,6 +23,10 @@ import StaffDeputy from './pages/staff/Deputy';
 import StaffObservations from './pages/staff/Observations';
 import GateScanner from './pages/staff/GateScanner'; 
 import ExitPermissions from './pages/staff/ExitPermissions'; 
+import ClassManagement from './pages/staff/ClassManagement';
+import DailyFollowup from './pages/staff/DailyFollowup';
+import ClassRoom from './pages/staff/ClassRoom';
+import TeacherAnalysis from './pages/staff/TeacherAnalysis';
 import { StaffUser } from './types';
 import { getActiveSchool, logoutUserSession } from './services/storage';
 
@@ -51,11 +55,17 @@ const ProtectedStaffRoute = ({
     return <Navigate to="/staff/login" replace />;
   }
 
+  // Allow access if requiredPermission is not set OR user has it OR user is admin_staff/teacher implied
   if (requiredPermission) {
     const user: StaffUser = JSON.parse(session);
-    const perms = user.permissions || ['attendance', 'requests', 'reports'];
+    const perms = user.permissions || [];
     
+    // Some basic routes are always allowed for staff
     if (!perms.includes(requiredPermission)) {
+        // Fallback check for new roles
+        if (user.role === 'teacher' && ['attendance', 'daily_followup'].includes(requiredPermission)) {
+            return <>{children}</>;
+        }
         return <Navigate to="/staff/home" replace />;
     }
   }
@@ -116,7 +126,12 @@ const AppContent = () => {
         <Route path="/staff/deputy" element={<ProtectedStaffRoute requiredPermission="deputy"><StaffDeputy /></ProtectedStaffRoute>} />
         <Route path="/staff/observations" element={<ProtectedStaffRoute requiredPermission="observations"><StaffObservations /></ProtectedStaffRoute>} />
         
-        {/* NEW ROUTES */}
+        {/* NEW TEACHER ROUTES */}
+        <Route path="/staff/classes" element={<ProtectedStaffRoute><ClassManagement /></ProtectedStaffRoute>} />
+        <Route path="/staff/daily-followup" element={<ProtectedStaffRoute requiredPermission="daily_followup"><DailyFollowup /></ProtectedStaffRoute>} />
+        <Route path="/staff/classroom" element={<ProtectedStaffRoute requiredPermission="daily_followup"><ClassRoom /></ProtectedStaffRoute>} />
+        <Route path="/staff/teacher-analysis" element={<ProtectedStaffRoute requiredPermission="daily_followup"><TeacherAnalysis /></ProtectedStaffRoute>} />
+
         <Route path="/staff/gate" element={<ProtectedStaffRoute requiredPermission="gate_security"><GateScanner /></ProtectedStaffRoute>} />
         <Route path="/staff/exit-permissions" element={<ProtectedStaffRoute requiredPermission="exit_perms"><ExitPermissions /></ProtectedStaffRoute>} />
         

@@ -1,9 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
-import { Home, FileText, Search, ShieldCheck, LogOut, Menu, X, Users, ClipboardCheck, BarChart2, MessageSquare, BookUser, LayoutGrid, Briefcase, ChevronLeft, ChevronRight, Settings, Sparkles, UserCircle, ScanLine, LogOut as ExitIcon, Download, Share, BellRing, Loader2, School as SchoolIcon } from 'lucide-react';
+import { Home, FileText, Search, ShieldCheck, LogOut, Menu, X, Users, ClipboardCheck, BarChart2, MessageSquare, BookUser, LayoutGrid, Briefcase, ChevronLeft, ChevronRight, Settings, Sparkles, UserCircle, ScanLine, LogOut as ExitIcon, Download, Share, BellRing, Loader2, School as SchoolIcon, BookOpen, TrendingUp, Presentation } from 'lucide-react';
 import { StaffUser, AppNotification, School } from '../types';
-import { getPendingRequestsCountForStaff, getNotifications, getParentChildren, createNotification, getActiveSchool, logoutSchool, getActiveSchoolId } from '../services/storage';
+import { getPendingRequestsCountForStaff, getNotifications, getParentChildren, getActiveSchool, logoutSchool, getActiveSchoolId } from '../services/storage';
 import ChatBot from './ChatBot';
 import InstallPrompt from './InstallPrompt';
 import { supabase } from '../supabaseClient';
@@ -20,7 +20,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // Desktop Collapse State
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [staffPermissions, setStaffPermissions] = useState<string[]>([]);
@@ -29,12 +29,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
   const [activeSchool, setActiveSchool] = useState<School | null>(null);
 
   // Install Logic State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-
-  // Notification Permission State
-  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
 
   // Notification Audio Ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -46,9 +41,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
       const school = getActiveSchool();
       setActiveSchool(school);
       
-      // Allow /s/:code and / without redirecting
       const isPublicRoute = location.pathname === '/' || location.pathname.startsWith('/s/');
-      
       if (!isPublicRoute && !school) {
           navigate('/');
       }
@@ -62,81 +55,13 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
-  // Initialize Audio & Check Permissions
+  // Initialize Audio
   useEffect(() => {
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    
-    if ('Notification' in window) {
-      setNotifPermission(Notification.permission);
-    }
   }, []);
-
-  // Install Prompt Logic
-  useEffect(() => {
-    // Check if installed
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-      setIsInstalled(true);
-    }
-
-    // Check iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    setIsIOS(/iphone|ipad|ipod/.test(userAgent));
-
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstalled(false);
-    };
-
-    window.addEventListener('beforeinstallprompt', handler);
-    window.addEventListener('appinstalled', () => setIsInstalled(true));
-    
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-      window.removeEventListener('appinstalled', () => setIsInstalled(true));
-    }
-  }, []);
-
-  const handleInstallClick = () => {
-    if (isIOS) {
-      alert("لتثبيت التطبيق على الآيفون:\n1. اضغط على زر المشاركة (Share) في أسفل المتصفح\n2. اختر 'إضافة إلى الصفحة الرئيسية' (Add to Home Screen)");
-    } else if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choice: any) => {
-        if (choice.outcome === 'accepted') {
-          setIsInstalled(true);
-          setDeferredPrompt(null);
-        }
-      });
-    } else {
-        // Fallback if prompt is lost or not supported
-        alert("لتثبيت التطبيق، يرجى استخدام خيار 'إضافة إلى الشاشة الرئيسية' من إعدادات المتصفح.");
-    }
-  };
-
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      alert("هذا المتصفح لا يدعم الإشعارات.");
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    setNotifPermission(permission);
-    if (permission === 'granted') {
-      // Send a test notification
-      if ('serviceWorker' in navigator) {
-         navigator.serviceWorker.ready.then(registration => {
-            registration.showNotification("تم تفعيل الإشعارات", {
-                body: "ستصلك التنبيهات المدرسية هنا فوراً.",
-                icon: SCHOOL_LOGO || '/vite.svg'
-            });
-         });
-      }
-    }
-  };
 
   // --- GLOBAL REALTIME NOTIFICATIONS (System Level) ---
   useEffect(() => {
-    // Determine current User ID (Parent or Staff)
     const parentId = localStorage.getItem('ozr_parent_id');
     const staffSession = localStorage.getItem('ozr_staff_session');
     let userId = '';
@@ -154,11 +79,10 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
             const user = JSON.parse(staffSession);
             userId = user.id;
         } else {
-            // Public mode or just landing page, maybe listen for global school alerts?
             return; 
         }
 
-        const watchedIds = [userId, ...childrenIds, 'ALL']; // Target User, Their Children, or Global
+        const watchedIds = [userId, ...childrenIds, 'ALL'];
 
         const channel = supabase.channel(`school_${schoolId}_notifications`)
             .on(
@@ -167,46 +91,23 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
                     event: 'INSERT', 
                     schema: 'public', 
                     table: 'notifications',
-                    filter: `school_id=eq.${schoolId}` // Filter by School ID at RLS/Query level logic conceptually
+                    filter: `school_id=eq.${schoolId}` 
                 },
-                async (payload) => {
+                async (payload: any) => {
                     const newNotif = payload.new as AppNotification;
                     
-                    // Filter: Is this notification relevant to me?
-                    // Note: Supabase Realtime filters are limited, so we double check school_id and target here
                     if (newNotif.schoolId === schoolId && watchedIds.includes(newNotif.targetUserId)) {
-                        
-                        // 1. Play Sound (if configured)
                         if (audioRef.current) {
                             audioRef.current.play().catch(() => {});
                         }
 
-                        // 2. Trigger System Notification (The one that appears on lock screen / status bar)
                         if (Notification.permission === 'granted') {
-                            const title = newNotif.title;
-                            const options: NotificationOptions = {
+                            new Notification(newNotif.title, {
                                 body: newNotif.message,
                                 icon: SCHOOL_LOGO || undefined,
-                                badge: SCHOOL_LOGO || undefined, // Android small icon
-                                tag: 'school-alert', // Grouping
-                                // @ts-ignore
-                                renotify: true,
-                                data: { url: window.location.origin }, // For click handling
-                                // @ts-ignore
-                                vibrate: [200, 100, 200]
-                            };
-
-                            // Use Service Worker for robust notifications (works better on mobile/PWA)
-                            if ('serviceWorker' in navigator) {
-                                const registration = await navigator.serviceWorker.ready;
-                                registration.showNotification(title, options);
-                            } else {
-                                // Fallback for standard web
-                                new Notification(title, options);
-                            }
+                            });
                         }
                         
-                        // 3. Update Badge inside app if staff
                         if (role === 'staff') {
                             setNotificationCount(prev => prev + 1);
                         }
@@ -230,7 +131,6 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
         const session = localStorage.getItem('ozr_staff_session');
         if (session) {
           const user: StaffUser = JSON.parse(session);
-          
           setStaffPermissions(user.permissions || ['attendance', 'requests', 'reports']);
 
           if (!user.permissions || user.permissions.includes('requests')) {
@@ -244,7 +144,6 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
         }
       };
       fetchStaffData();
-      
       const interval = setInterval(fetchStaffData, 60000);
       return () => clearInterval(interval);
     }
@@ -254,7 +153,6 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
   const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed);
   const showChatBot = ['/inquiry', '/staff/home', '/admin/dashboard'].includes(location.pathname);
 
-  // If on Landing Page or School Landing, don't show the layout
   if (location.pathname === '/' || location.pathname.startsWith('/s/')) {
       return <>{children}</>;
   }
@@ -263,64 +161,50 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
     <Link 
       to={to} 
       className={`
-        flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 font-bold relative group mb-1
+        flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 font-bold relative group mb-1
         ${isActive(to) 
-          ? `bg-white shadow-md text-${activeColor}-600` 
-          : 'text-slate-500 hover:bg-slate-100/50 hover:text-slate-900'}
+          ? `bg-slate-900 text-white shadow-lg shadow-slate-900/20` 
+          : 'text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm'}
         ${isSidebarCollapsed ? 'justify-center px-2' : ''}
       `}
       title={isSidebarCollapsed ? label : ''}
     >
-      <Icon size={22} className={`shrink-0 transition-colors ${isActive(to) ? `text-${activeColor}-600 scale-110` : 'text-slate-400 group-hover:text-slate-600'}`} />
+      <Icon size={20} className={`shrink-0 transition-colors ${isActive(to) ? `text-white` : 'text-slate-400 group-hover:text-slate-600'}`} />
       
       {!isSidebarCollapsed && (
-        <span className="truncate">{label}</span>
+        <span className="truncate text-sm">{label}</span>
       )}
 
-      {/* Badge Logic */}
       {badge !== undefined && badge > 0 && (
         <span className={`
           absolute bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm border border-white
           ${isSidebarCollapsed 
-            ? 'top-2 right-2 w-4 h-4' 
-            : 'left-4 top-1/2 -translate-y-1/2 px-2 py-0.5 min-w-[20px]'}
+            ? 'top-2 right-2 w-3 h-3' 
+            : 'left-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 min-w-[18px]'}
         `}>
           {badge}
         </span>
-      )}
-      
-      {/* Active Indicator Bar */}
-      {isActive(to) && !isSidebarCollapsed && (
-        <div className={`absolute right-0 top-3 bottom-3 w-1 bg-${activeColor}-600 rounded-l-full`}></div>
       )}
     </Link>
   );
 
   const SectionLabel = ({ label }: { label: string }) => (
     !isSidebarCollapsed ? (
-      <div className="px-4 py-2 mt-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-        <div className="h-px bg-slate-200 flex-1"></div>
+      <div className="px-4 py-2 mt-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2 opacity-70">
         {label}
       </div>
-    ) : <div className="my-2 border-t border-slate-100 mx-4"></div>
+    ) : <div className="my-2 border-t border-slate-200/50 mx-4"></div>
   );
 
   const handleGlobalLogout = () => {
-      // This will trigger the logout passed from App.tsx (which preserves school context)
       if (onLogout) onLogout();
   };
 
-  const handleChangeSchool = () => {
-      if(window.confirm('هل أنت متأكد من تغيير المدرسة؟ سيتم تسجيل الخروج.')) {
-          logoutSchool(); // Clears everything including school context
-          navigate('/');
-      }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row h-screen overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-50/50 flex flex-col md:flex-row h-screen overflow-hidden font-sans">
+      
       {/* Mobile Header */}
-      <div className="md:hidden bg-white/80 backdrop-blur-md border-b p-4 flex justify-between items-center sticky top-0 z-50 shadow-sm shrink-0 h-16">
+      <div className="md:hidden bg-white/80 backdrop-blur-md border-b border-slate-200/50 p-4 flex justify-between items-center sticky top-0 z-50 shadow-sm shrink-0 h-16">
         <div className="flex items-center gap-3 font-bold text-slate-800 text-sm">
           {SCHOOL_LOGO ? (
               <img src={SCHOOL_LOGO} alt="Logo" className="w-8 h-8 object-contain" />
@@ -339,23 +223,23 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
 
       {/* Sidebar Navigation */}
       <aside className={`
-        fixed md:relative top-0 h-full bg-slate-50/80 backdrop-blur-xl border-l border-white/50 shadow-xl md:shadow-none z-40
+        fixed md:relative top-0 h-full bg-slate-100/50 backdrop-blur-xl border-l border-white/50 z-40
         transition-all duration-300 ease-in-out flex flex-col
-        ${isMobileMenuOpen ? 'translate-x-0 w-72' : 'translate-x-full md:translate-x-0'}
-        ${isSidebarCollapsed ? 'md:w-24' : 'md:w-72'}
-        right-0
+        ${isMobileMenuOpen ? 'translate-x-0 w-72 bg-white shadow-2xl' : 'translate-x-full md:translate-x-0'}
+        ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
+        right-0 md:shadow-none
       `}>
         {/* Mobile Close Button */}
-        <div className="md:hidden p-4 flex justify-end border-b border-slate-100">
-           <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400 p-2">
-             <X size={24} />
+        <div className="md:hidden p-4 flex justify-end">
+           <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400 p-2 bg-slate-50 rounded-full">
+             <X size={20} />
            </button>
         </div>
 
         {/* Desktop Toggle Button */}
         <button 
           onClick={toggleSidebar}
-          className="hidden md:flex absolute -left-3 top-12 bg-white border border-slate-200 rounded-full p-1.5 text-slate-400 hover:text-blue-900 hover:border-blue-300 shadow-sm z-50 transition-colors transform hover:scale-110"
+          className="hidden md:flex absolute -left-3 top-10 bg-white border border-slate-200 rounded-full p-1.5 text-slate-400 hover:text-blue-900 hover:border-blue-300 shadow-sm z-50 transition-all hover:scale-110"
         >
           {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
@@ -363,190 +247,120 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
         {/* Header Section */}
         <div className={`p-6 hidden md:flex flex-col items-center text-center gap-3 shrink-0 transition-all ${isSidebarCollapsed ? 'py-6 px-2' : ''}`}>
           <div className="relative group cursor-pointer" onClick={() => navigate(activeSchool ? `/s/${activeSchool.schoolCode}` : '/')}>
-             <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 rounded-full group-hover:opacity-30 transition-opacity"></div>
              {SCHOOL_LOGO ? (
-                 <img src={SCHOOL_LOGO} alt="School Logo" className={`relative object-contain drop-shadow-md transition-all duration-500 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-24 h-24 group-hover:scale-105'}`} />
+                 <img src={SCHOOL_LOGO} alt="School Logo" className={`relative object-contain drop-shadow-sm transition-all duration-500 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-20 h-20 group-hover:scale-105'}`} />
              ) : (
-                 <div className={`relative bg-blue-100 rounded-full flex items-center justify-center text-blue-600 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-24 h-24'}`}>
-                     <SchoolIcon size={isSidebarCollapsed ? 20 : 40}/>
+                 <div className={`relative bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm ${isSidebarCollapsed ? 'w-10 h-10' : 'w-20 h-20'}`}>
+                     <SchoolIcon size={isSidebarCollapsed ? 20 : 32}/>
                  </div>
              )}
           </div>
           {!isSidebarCollapsed && (
             <div className="animate-fade-in">
-              <h1 className="font-extrabold text-slate-800 text-base leading-tight px-2">{SCHOOL_NAME}</h1>
-              {activeSchool?.plan === 'pro' && (
-                  <div className="mt-2 inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-200 px-3 py-1 rounded-full shadow-sm">
-                      <Sparkles size={10} className="text-amber-600 animate-pulse"/>
-                      <span className="text-[10px] text-amber-700 font-bold">نسخة PRO</span>
-                  </div>
-              )}
+              <h1 className="font-extrabold text-slate-800 text-sm leading-tight px-2">{SCHOOL_NAME}</h1>
+              <p className="text-[10px] text-slate-400 font-mono mt-1">{activeSchool?.schoolCode}</p>
             </div>
           )}
         </div>
 
-        {/* Enable Notification Button (If Permission is default/prompt) */}
-        {notifPermission === 'default' && (
-            <div className={`px-4 mb-2 animate-pulse ${isSidebarCollapsed ? 'px-2' : ''}`}>
-                <button 
-                    onClick={requestNotificationPermission}
-                    className={`w-full bg-blue-100 text-blue-700 rounded-xl p-3 text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-200 transition-colors ${isSidebarCollapsed ? 'flex-col p-2 text-[9px]' : ''}`}
-                >
-                    <BellRing size={isSidebarCollapsed ? 16 : 14} />
-                    {!isSidebarCollapsed && <span>تفعيل التنبيهات</span>}
-                </button>
-            </div>
-        )}
-
-        {/* Scrollable Navigation Links */}
-        <nav className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-slate-200 pb-20 md:pb-4 space-y-1">
+        {/* Navigation Links */}
+        <nav className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-slate-200 space-y-1">
           
           {role === 'public' && (
             <>
-              {/* <NavItem to="/" icon={Home} label="الرئيسية" activeColor="blue" />  Removed because Home is now generic landing */}
-              <SectionLabel label="خدمات أولياء الأمور" />
+              <SectionLabel label="الخدمات العامة" />
               <NavItem to="/inquiry" icon={UserCircle} label="بوابة ولي الأمر" activeColor="purple" />
               <NavItem to="/submit" icon={FileText} label="تقديم عذر غياب" activeColor="emerald" />
-              
-              <SectionLabel label="منسوبي المدرسة" />
-              <NavItem to="/staff/login" icon={Users} label="دخول المعلمين" />
-              <NavItem to="/admin/login" icon={ShieldCheck} label="بوابة الإدارة" />
+              <SectionLabel label="تسجيل الدخول" />
+              <NavItem to="/staff/login" icon={Users} label="المعلمون والموظفون" />
+              <NavItem to="/admin/login" icon={ShieldCheck} label="الإدارة المدرسية" />
             </>
           )}
 
           {role === 'admin' && (
             <>
               <NavItem to="/admin/dashboard" icon={LayoutGrid} label="مركز القيادة" activeColor="indigo" />
-              
-              <SectionLabel label="العمليات اليومية" />
+              <SectionLabel label="إدارة العمليات" />
               <NavItem to="/admin/requests" icon={FileText} label="طلبات الأعذار" activeColor="amber" />
-              <NavItem to="/admin/attendance-reports" icon={BarChart2} label="سجل الغياب اليومي" activeColor="emerald" />
+              <NavItem to="/admin/attendance-reports" icon={BarChart2} label="سجل الغياب" activeColor="emerald" />
+              <SectionLabel label="التكوين" />
+              <NavItem to="/admin/attendance-stats" icon={Sparkles} label="التحليل الذكي" activeColor="purple" />
+              <NavItem to="/admin/students" icon={Search} label="الطلاب" />
+              <NavItem to="/admin/users" icon={Users} label="المستخدمين" />
               
-              <SectionLabel label="التحليل والبيانات" />
-              <NavItem to="/admin/attendance-stats" icon={Sparkles} label="تحليل الذكاء الاصطناعي" activeColor="purple" />
-              <NavItem to="/admin/students" icon={Search} label="الطلاب والبيانات" />
-              <NavItem to="/admin/users" icon={Users} label="إدارة المستخدمين" />
-              
-              <div className="my-4 border-t border-slate-100"></div>
+              <div className="my-4 border-t border-slate-200/50 mx-2"></div>
               
               <button 
                 onClick={handleGlobalLogout}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-colors duration-200 font-bold shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
-                title="تسجيل خروج"
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-colors duration-200 font-bold shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
               >
-                <LogOut size={22} className="shrink-0" />
-                {!isSidebarCollapsed && <span>خروج من المدرسة</span>}
+                <LogOut size={20} className="shrink-0" />
+                {!isSidebarCollapsed && <span className="text-sm">خروج</span>}
               </button>
             </>
           )}
 
           {role === 'staff' && (
             <>
-               <NavItem to="/staff/home" icon={Home} label="القائمة الرئيسية" activeColor="blue" badge={notificationCount} />
+               <NavItem to="/staff/home" icon={Home} label="الرئيسية" activeColor="blue" badge={notificationCount} />
+
+               {/* Teacher Specific Academic Tools */}
+               {hasPermission('daily_followup') && (
+                 <>
+                   <SectionLabel label="الأدوات الأكاديمية" />
+                   <NavItem to="/staff/classes" icon={Settings} label="إدارة الفصول" activeColor="slate" />
+                   <NavItem to="/staff/daily-followup" icon={BookOpen} label="المتابعة اليومية" activeColor="indigo" />
+                   <NavItem to="/staff/classroom" icon={Presentation} label="الفصل الذكي" activeColor="violet" />
+                   <NavItem to="/staff/teacher-analysis" icon={TrendingUp} label="تحليل الأداء" activeColor="teal" />
+                 </>
+               )}
 
                <SectionLabel label="المهام اليومية" />
-               {hasPermission('gate_security') && (
-                 <NavItem to="/staff/gate" icon={ScanLine} label="ماسح البوابة" activeColor="teal" />
-               )}
-               {hasPermission('exit_perms') && (
-                 <NavItem to="/staff/exit-permissions" icon={ExitIcon} label="استئذان الطلاب" activeColor="orange" />
-               )}
-               {hasPermission('attendance') && (
-                 <NavItem to="/staff/attendance" icon={ClipboardCheck} label="رصد الغياب" activeColor="emerald" />
-               )}
-               {hasPermission('observations') && (
-                 <NavItem to="/staff/observations" icon={FileText} label="ملاحظات الطلاب" activeColor="pink" />
-               )}
-               {hasPermission('requests') && (
-                 <NavItem to="/staff/requests" icon={MessageSquare} label="طلبات الأعذار" badge={pendingCount} activeColor="amber" />
-               )}
+               {hasPermission('attendance') && <NavItem to="/staff/attendance" icon={ClipboardCheck} label="رصد الغياب" activeColor="emerald" />}
+               {hasPermission('observations') && <NavItem to="/staff/observations" icon={FileText} label="الملاحظات" activeColor="pink" />}
+               {hasPermission('requests') && <NavItem to="/staff/requests" icon={MessageSquare} label="الأعذار" badge={pendingCount} activeColor="amber" />}
 
-               {/* Only show 'Management' label if user has permissions for it */}
-               {(hasPermission('students') || hasPermission('deputy')) && (
-                 <SectionLabel label="الإدارة والتوجيه" />
-               )}
+               {(hasPermission('gate_security') || hasPermission('exit_perms')) && <SectionLabel label="الأمن والسلامة" />}
+               {hasPermission('gate_security') && <NavItem to="/staff/gate" icon={ScanLine} label="ماسح البوابة" activeColor="teal" />}
+               {hasPermission('exit_perms') && <NavItem to="/staff/exit-permissions" icon={ExitIcon} label="الاستئذان" activeColor="orange" />}
 
-               {/* Counselor Role */}
-               {hasPermission('students') && (
-                 <NavItem to="/staff/students" icon={BookUser} label="مكتب الموجه الطلابي" activeColor="purple" />
-               )}
+               {(hasPermission('students') || hasPermission('deputy')) && <SectionLabel label="الإدارة" />}
+               {hasPermission('students') && <NavItem to="/staff/students" icon={BookUser} label="الموجه الطلابي" activeColor="purple" />}
+               {hasPermission('deputy') && <NavItem to="/staff/deputy" icon={Briefcase} label="وكيل الشؤون" activeColor="red" />}
 
-               {/* Deputy Role */}
-               {hasPermission('deputy') && (
-                 <NavItem to="/staff/deputy" icon={Briefcase} label="مكتب وكيل الشؤون" activeColor="red" />
-               )}
+               <SectionLabel label="أخرى" />
+               {hasPermission('contact_directory') && !hasPermission('students') && <NavItem to="/staff/directory" icon={BookUser} label="الدليل" />}
+               {hasPermission('reports') && <NavItem to="/staff/reports" icon={BarChart2} label="التقارير" />}
 
-               <SectionLabel label="معلومات" />
-               {/* Contact Directory (Teachers) */}
-               {hasPermission('contact_directory') && !hasPermission('students') && (
-                 <NavItem to="/staff/directory" icon={BookUser} label="دليل التواصل" />
-               )}
-
-               {hasPermission('reports') && (
-                 <NavItem to="/staff/reports" icon={BarChart2} label="تقارير فصولي" />
-               )}
-
-              <div className="my-4 border-t border-slate-100"></div>
+              <div className="my-4 border-t border-slate-200/50 mx-2"></div>
               
               <button 
                 onClick={handleGlobalLogout}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-colors duration-200 font-bold shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
-                title="تسجيل خروج"
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-colors duration-200 font-bold shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
               >
-                <LogOut size={22} className="shrink-0" />
-                {!isSidebarCollapsed && <span>تسجيل خروج</span>}
+                <LogOut size={20} className="shrink-0" />
+                {!isSidebarCollapsed && <span className="text-sm">خروج</span>}
               </button>
-            </>
-          )}
-
-          {/* Public Logout (Back to School Selection) */}
-          {role === 'public' && (
-              <button 
-                onClick={handleChangeSchool}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors duration-200 font-bold shrink-0 mt-4 border-t border-slate-100 pt-4 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
-                title="تغيير المدرسة"
-              >
-                <LogOut size={22} className="shrink-0" />
-                {!isSidebarCollapsed && <span>تغيير المدرسة</span>}
-              </button>
-          )}
-
-          {/* INSTALL APP BUTTON (Visible if not installed) */}
-          {!isInstalled && (
-            <>
-                <div className="my-2 border-t border-slate-100 mx-4"></div>
-                <button
-                    onClick={handleInstallClick}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200 font-bold shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
-                    title="تثبيت التطبيق"
-                >
-                    <Download size={22} className="shrink-0" />
-                    {!isSidebarCollapsed && <span>تثبيت التطبيق</span>}
-                </button>
             </>
           )}
         </nav>
 
-        {/* Footer Info - Fixed at Bottom */}
+        {/* Footer Info */}
         {!isSidebarCollapsed && (
-          <div className="p-4 text-center text-[10px] text-slate-400 bg-white/50 border-t border-slate-100 shrink-0 hidden md:block backdrop-blur-sm">
-            <p className="font-bold">نظام عذر - منصة SaaS v3.0</p>
-            <p className="mt-0.5 truncate px-2 opacity-70">كود المدرسة: {activeSchool?.schoolCode}</p>
+          <div className="p-4 text-center text-[10px] text-slate-400 border-t border-slate-200/50 hidden md:block">
+            <p className="font-bold opacity-50">نظام الإدارة المدرسية الذكية</p>
           </div>
         )}
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-6 overflow-y-auto h-full bg-slate-50 relative w-full custom-scrollbar">
+      <main className="flex-1 p-4 md:p-6 overflow-y-auto h-full relative w-full custom-scrollbar">
         <div className="max-w-7xl mx-auto pb-20 md:pb-10">
           {children}
         </div>
       </main>
 
-      {/* Chat Bot Widget - Only on Main Screens */}
       {showChatBot && <ChatBot />}
-      
-      {/* Install App Prompt (Popup Banner) */}
       <InstallPrompt />
 
       {/* Mobile Overlay */}

@@ -1,9 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, KeyRound, ShieldCheck, ChevronRight, Check, Lock } from 'lucide-react';
+import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, KeyRound, ShieldCheck, ChevronRight, Check, Lock, Download, FileSpreadsheet, Briefcase } from 'lucide-react';
 import { getStaffUsersSync, getStaffUsers, addStaffUser, updateStaffUser, deleteStaffUser, getAvailableClassesForGrade } from '../../services/storage';
 import { StaffUser, ClassAssignment } from '../../types';
 import { GRADES, PERMISSIONS } from '../../constants';
+
+// Declare XLSX global
+declare var XLSX: any;
 
 const Users: React.FC = () => {
   // Use synchronous getter for instant load if available
@@ -14,11 +17,13 @@ const Users: React.FC = () => {
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
+  const [processingFile, setProcessingFile] = useState(false);
   
   // New User Form State
   const [name, setName] = useState('');
   const [passcode, setPasscode] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [role, setRole] = useState<'teacher' | 'admin_staff'>('teacher');
   
   // Assignment State
   const [selectedGrade, setSelectedGrade] = useState('');
@@ -110,8 +115,9 @@ const Users: React.FC = () => {
     setName('');
     setPasscode('');
     setAssignments([]);
-    // Default permissions for new user: Attendance, Requests, Reports
-    setSelectedPermissions(['attendance', 'requests', 'reports']);
+    // Default permissions for new teacher
+    setRole('teacher');
+    setSelectedPermissions(['attendance', 'daily_followup']); 
     setSelectedGrade('');
     setSelectedClassesForGrade([]);
     setShowAddModal(true);
@@ -122,10 +128,21 @@ const Users: React.FC = () => {
     setName(user.name);
     setPasscode(user.passcode);
     setAssignments(user.assignments || []);
-    setSelectedPermissions(user.permissions || ['attendance', 'requests', 'reports']);
+    setSelectedPermissions(user.permissions || []);
+    setRole(user.role || 'teacher');
     setSelectedGrade('');
     setSelectedClassesForGrade([]);
     setShowAddModal(true);
+  };
+
+  const handleRoleChange = (newRole: 'teacher' | 'admin_staff') => {
+      setRole(newRole);
+      if (newRole === 'teacher') {
+          setSelectedPermissions(['attendance', 'daily_followup']);
+      } else {
+          // Reset permissions for admin staff to be manually selected or default to none
+          setSelectedPermissions([]);
+      }
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -136,9 +153,8 @@ const Users: React.FC = () => {
       return;
     }
 
-    if (assignments.length === 0 && selectedPermissions.length === 0) {
-      alert("يجب تخصيص صلاحية واحدة أو فصل دراسي واحد على الأقل.");
-      return;
+    if (role === 'teacher' && assignments.length === 0 && selectedPermissions.length === 0) {
+      // Just a warning, proceed anyway
     }
 
     setSaving(true);
@@ -149,26 +165,19 @@ const Users: React.FC = () => {
         className: a.className
       }));
 
+      const payload: StaffUser = {
+          id: editingUser ? editingUser.id : '',
+          name: name,
+          passcode: passcode,
+          assignments: cleanAssignments,
+          permissions: selectedPermissions,
+          role: role
+      };
+
       if (editingUser) {
-        // Update
-        const updatedUser: StaffUser = {
-          ...editingUser,
-          name: name,
-          passcode: passcode,
-          assignments: cleanAssignments,
-          permissions: selectedPermissions,
-        };
-        await updateStaffUser(updatedUser);
+        await updateStaffUser(payload);
       } else {
-        // Create
-        const newUser: StaffUser = {
-          id: '', // Will be generated
-          name: name,
-          passcode: passcode,
-          assignments: cleanAssignments,
-          permissions: selectedPermissions,
-        };
-        await addStaffUser(newUser);
+        await addStaffUser(payload);
       }
 
       // Refresh user list
@@ -198,6 +207,71 @@ const Users: React.FC = () => {
         alert(`فشل الحذف: ${error.message || 'خطأ غير معروف'}`);
       }
     }
+  };
+
+  // --- Excel Logic ---
+  const handleDownloadTemplate = () => {
+      if (typeof XLSX === 'undefined') return;
+      const ws = XLSX.utils.json_to_sheet([
+          { 'Name': 'محمد أحمد', 'ID': '102030', 'Role': 'teacher' },
+          { 'Name': 'سارة علي', 'ID': '506070', 'Role': 'admin' }
+      ]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Users");
+      XLSX.writeFile(wb, "Staff_Template.xlsx");
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (typeof XLSX === 'undefined') { alert("مكتبة Excel غير متوفرة"); return; }
+
+      setProcessingFile(true);
+      try {
+          const buffer = await file.arrayBuffer();
+          const wb = XLSX.read(buffer, { type: 'array' });
+          const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          
+          if (data.length === 0) { alert("الملف فارغ"); return; }
+
+          let count = 0;
+          for (const row of data as any[]) {
+              const name = row['Name'] || row['الاسم'] || row['name'];
+              const id = row['ID'] || row['الهوية'] || row['رقم الهوية'] || row['id'];
+              const roleVal = row['Role'] || row['الدور'] || row['role'] || 'teacher';
+              
+              if (name && id) {
+                  // Check if passcode exists
+                  if (!users.some(u => u.passcode === id.toString())) {
+                      const finalRole = (roleVal.toString().toLowerCase().includes('admin') || roleVal.toString().includes('إداري')) ? 'admin_staff' : 'teacher';
+                      const defaultPerms = finalRole === 'teacher' ? ['attendance', 'daily_followup'] : ['reports'];
+
+                      await addStaffUser({
+                          id: '',
+                          name: name.toString(),
+                          passcode: id.toString(),
+                          assignments: [],
+                          permissions: defaultPerms,
+                          role: finalRole
+                      });
+                      count++;
+                  }
+              }
+          }
+          
+          if (count > 0) {
+              await fetchUsers();
+              alert(`تم استيراد ${count} مستخدم بنجاح.`);
+          } else {
+              alert("لم يتم استيراد أي مستخدم (تأكد من صحة الملف أو عدم تكرار الأرقام).");
+          }
+
+      } catch (e) {
+          alert("خطأ في قراءة الملف");
+      } finally {
+          setProcessingFile(false);
+          e.target.value = '';
+      }
   };
 
   const filteredUsers = users.filter(u => 
@@ -230,18 +304,34 @@ const Users: React.FC = () => {
              إدارة المعلمين والمستخدمين
           </h1>
           <p className="text-slate-500 mt-2 text-sm md:text-base max-w-lg">
-             التحكم بصلاحيات الدخول وإسناد الفصول الدراسية للمعلمين والمشرفين.
+             التحكم بصلاحيات الدخول، تحديد الأدوار (معلم/إداري)، وإسناد الفصول.
           </p>
         </div>
-        <div className="relative z-10 w-full md:w-auto">
+        <div className="relative z-10 flex gap-2 w-full md:w-auto flex-wrap justify-center">
+            <button 
+                onClick={handleDownloadTemplate}
+                className="bg-white text-slate-600 border border-slate-200 px-4 py-3.5 rounded-xl hover:bg-slate-50 font-bold text-sm flex items-center gap-2"
+                title="تحميل نموذج Excel"
+            >
+                <Download size={18} />
+            </button>
+            
+            <div className="relative">
+                <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" id="staff-upload" disabled={processingFile} />
+                <label htmlFor="staff-upload" className={`bg-emerald-600 text-white px-4 py-3.5 rounded-xl hover:bg-emerald-700 font-bold text-sm flex items-center gap-2 cursor-pointer ${processingFile ? 'opacity-50' : ''}`}>
+                    {processingFile ? <Loader2 className="animate-spin" size={18}/> : <FileSpreadsheet size={18} />}
+                    <span className="hidden sm:inline">استيراد Excel</span>
+                </label>
+            </div>
+
             <button 
             onClick={openAddModal}
-            className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-900 text-white px-6 py-3.5 rounded-xl hover:bg-blue-800 transition-all font-bold shadow-lg shadow-blue-900/20 active:scale-95 group"
+            className="flex items-center justify-center gap-2 bg-blue-900 text-white px-6 py-3.5 rounded-xl hover:bg-blue-800 transition-all font-bold shadow-lg shadow-blue-900/20 active:scale-95 group"
             >
             <div className="bg-white/10 p-1 rounded-lg group-hover:bg-white/20 transition-colors">
                 <Plus size={20} />
             </div>
-            <span>إضافة مستخدم جديد</span>
+            <span>إضافة مستخدم</span>
             </button>
         </div>
       </div>
@@ -262,7 +352,7 @@ const Users: React.FC = () => {
 
       <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex items-center gap-3 text-sm text-blue-800">
           <div className="bg-white p-2 rounded-lg text-blue-600 shadow-sm"><Lock size={16}/></div>
-          <p>ملاحظة: حساب <strong>مدير النظام (Admin)</strong> الرئيسي ثابت ولا يظهر في هذه القائمة لضمان الأمان. يمكنك فقط إدارة المعلمين والمشرفين هنا.</p>
+          <p>ملاحظة: حساب <strong>مدير النظام (Admin)</strong> الرئيسي ثابت ولا يظهر في هذه القائمة.</p>
       </div>
 
       {/* Users Grid */}
@@ -280,21 +370,21 @@ const Users: React.FC = () => {
                <div key={u.id} className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-100 transition-all duration-300 flex flex-col relative overflow-hidden">
                   
                   {/* Card Decoration */}
-                  <div className="h-2 w-full bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+                  <div className={`h-2 w-full bg-gradient-to-r ${u.role === 'admin_staff' ? 'from-purple-500 to-pink-600' : 'from-blue-500 to-indigo-600'}`}></div>
 
                   <div className="p-6 flex-1 flex flex-col gap-5">
                      
                      {/* Header: Info & Actions */}
                      <div className="flex justify-between items-start">
                         <div className="flex items-center gap-4">
-                           <div className="w-14 h-14 rounded-2xl bg-slate-50 text-blue-900 border border-slate-100 flex items-center justify-center font-bold text-xl shadow-inner">
+                           <div className={`w-14 h-14 rounded-2xl ${u.role === 'admin_staff' ? 'bg-purple-50 text-purple-900' : 'bg-blue-50 text-blue-900'} border border-slate-100 flex items-center justify-center font-bold text-xl shadow-inner`}>
                               {u.name.charAt(0)}
                            </div>
                            <div>
                               <h3 className="font-bold text-slate-900 text-lg group-hover:text-blue-900 transition-colors">{u.name}</h3>
-                              <p className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full w-fit mt-1">
-                                {u.permissions?.includes('students') ? 'موجه طلابي / إداري' : 'طاقم تدريس'}
-                              </p>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${u.role === 'admin_staff' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {u.role === 'admin_staff' ? 'كادر إداري' : 'كادر تعليمي'}
+                              </span>
                            </div>
                         </div>
                         
@@ -330,11 +420,10 @@ const Users: React.FC = () => {
                      
                      {/* Permissions Tag Cloud */}
                      <div className="flex flex-wrap gap-1.5">
-                        {u.permissions?.includes('attendance') && <span className="text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 rounded-md font-bold">رصد الغياب</span>}
-                        {u.permissions?.includes('requests') && <span className="text-[10px] px-2 py-1 bg-amber-50 text-amber-700 rounded-md font-bold">الأعذار</span>}
-                        {u.permissions?.includes('students') && <span className="text-[10px] px-2 py-1 bg-purple-50 text-purple-700 rounded-md font-bold">دليل الطلاب</span>}
-                        {u.permissions?.includes('deputy') && <span className="text-[10px] px-2 py-1 bg-red-50 text-red-700 rounded-md font-bold">الوكيل</span>}
-                        {u.permissions?.includes('reports') && <span className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 rounded-md font-bold">التقارير</span>}
+                        {u.permissions?.slice(0, 4).map(perm => (
+                            <span key={perm} className="text-[10px] px-2 py-1 bg-slate-100 text-slate-600 rounded-md font-bold">{perm}</span>
+                        ))}
+                        {u.permissions && u.permissions.length > 4 && <span className="text-[10px] px-2 py-1 bg-slate-100 text-slate-600 rounded-md font-bold">+{u.permissions.length - 4}</span>}
                      </div>
 
                      {/* Assignments List */}
@@ -380,7 +469,7 @@ const Users: React.FC = () => {
                         </div>
                         {editingUser ? 'تعديل بيانات المستخدم' : 'إضافة مستخدم جديد'}
                     </h2>
-                    <p className="text-slate-500 text-sm mt-1 mr-14">قم بتعبئة بيانات المعلم وتحديد الصلاحيات والفصول.</p>
+                    <p className="text-slate-500 text-sm mt-1 mr-14">قم بتعبئة بيانات الموظف وتحديد الدور والصلاحيات.</p>
                  </div>
                  <button onClick={() => setShowAddModal(false)} className="bg-white p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors shadow-sm border border-slate-100">
                     <X size={20} />
@@ -390,21 +479,44 @@ const Users: React.FC = () => {
               <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
                  <form id="userForm" onSubmit={handleSaveUser} className="space-y-8">
                     {/* Basic Info Section */}
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className={labelClasses}>اسم المعلم / المشرف</label>
-                        <div className="relative">
-                           <input required value={name} onChange={e => setName(e.target.value)} className={inputClasses} placeholder="مثال: أ. محمد عبدالله" />
-                           <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                    <div className="space-y-4">
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className={labelClasses}>اسم الموظف</label>
+                                <div className="relative">
+                                    <input required value={name} onChange={e => setName(e.target.value)} className={inputClasses} placeholder="مثال: أ. محمد عبدالله" />
+                                    <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className={labelClasses}>رمز الدخول (رقم سري)</label>
+                                <div className="relative">
+                                    <input required value={passcode} onChange={e => setPasscode(e.target.value)} className={inputClasses} placeholder="مثال: 1234" />
+                                    <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                                </div>
+                            </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                         <label className={labelClasses}>رمز الدخول (رقم سري)</label>
-                         <div className="relative">
-                           <input required value={passcode} onChange={e => setPasscode(e.target.value)} className={inputClasses} placeholder="مثال: 1234" />
-                           <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-                         </div>
-                      </div>
+
+                        {/* Role Selection */}
+                        <div className="space-y-2">
+                            <label className={labelClasses}>نوع الوظيفة (الدور)</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => handleRoleChange('teacher')}
+                                    className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${role === 'teacher' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                >
+                                    <Briefcase size={20}/> كادر تعليمي (معلم)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRoleChange('admin_staff')}
+                                    className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${role === 'admin_staff' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                >
+                                    <ShieldCheck size={20}/> كادر إداري (وكيل/مرشد)
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="border-t border-slate-100"></div>
@@ -437,125 +549,129 @@ const Users: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="border-t border-slate-100"></div>
+                    {role === 'teacher' && (
+                        <>
+                        <div className="border-t border-slate-100"></div>
 
-                    {/* Assignments Builder */}
-                    <div className="space-y-6">
-                       <div className="flex items-center gap-2 text-blue-900 font-bold text-lg">
-                          <School className="text-blue-500" />
-                          <h3>إسناد الفصول الدراسية</h3>
-                       </div>
+                        {/* Assignments Builder */}
+                        <div className="space-y-6">
+                        <div className="flex items-center gap-2 text-blue-900 font-bold text-lg">
+                            <School className="text-blue-500" />
+                            <h3>إسناد الفصول الدراسية</h3>
+                        </div>
 
-                       <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6 relative overflow-hidden">
-                          <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500 opacity-5 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500 opacity-5 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
 
-                          <div className="grid md:grid-cols-2 gap-6">
-                             <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">1. اختر الصف الدراسي</label>
-                                <select 
-                                  value={selectedGrade} 
-                                  onChange={e => { setSelectedGrade(e.target.value); setSelectedClassesForGrade([]); }} 
-                                  className={inputClasses}
-                                >
-                                   <option value="">-- اختر الصف --</option>
-                                   {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
-                                </select>
-                             </div>
-                             
-                             <div className="flex items-end">
-                                <div className="w-full">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
-                                       2. حدد الفصول (الشعب)
-                                    </label>
-                                    {!selectedGrade ? (
-                                       <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-3 text-center text-slate-400 text-sm">
-                                          يرجى اختيار الصف أولاً
-                                       </div>
-                                    ) : loadingClasses ? (
-                                        <div className="flex items-center gap-2 text-sm text-slate-500 bg-white p-3 rounded-xl border border-slate-200">
-                                            <Loader2 className="animate-spin text-blue-600" size={16} /> جاري جلب الشعب...
-                                        </div>
-                                    ) : availableClasses.length > 0 ? (
-                                        <div className="bg-white p-3 rounded-xl border border-slate-200 flex flex-wrap gap-2 min-h-[52px]">
-                                            {availableClasses.map(cls => {
-                                                const isSelected = selectedClassesForGrade.includes(cls);
-                                                return (
-                                                    <button
-                                                        key={cls}
-                                                        type="button"
-                                                        onClick={() => handleToggleClass(cls)}
-                                                        className={`
-                                                        flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-sm
-                                                        ${isSelected 
-                                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' 
-                                                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-white'}
-                                                        `}
-                                                    >
-                                                        {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                                                        <span className="font-bold">{cls}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-xl border border-amber-100 flex items-center gap-2">
-                                            <RefreshCw size={16}/> لا توجد فصول مسجلة لهذا الصف.
-                                        </div>
-                                    )}
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">1. اختر الصف الدراسي</label>
+                                    <select 
+                                    value={selectedGrade} 
+                                    onChange={e => { setSelectedGrade(e.target.value); setSelectedClassesForGrade([]); }} 
+                                    className={inputClasses}
+                                    >
+                                    <option value="">-- اختر الصف --</option>
+                                    {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                                    </select>
                                 </div>
-                             </div>
-                          </div>
+                                
+                                <div className="flex items-end">
+                                    <div className="w-full">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                                        2. حدد الفصول (الشعب)
+                                        </label>
+                                        {!selectedGrade ? (
+                                        <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-3 text-center text-slate-400 text-sm">
+                                            يرجى اختيار الصف أولاً
+                                        </div>
+                                        ) : loadingClasses ? (
+                                            <div className="flex items-center gap-2 text-sm text-slate-500 bg-white p-3 rounded-xl border border-slate-200">
+                                                <Loader2 className="animate-spin text-blue-600" size={16} /> جاري جلب الشعب...
+                                            </div>
+                                        ) : availableClasses.length > 0 ? (
+                                            <div className="bg-white p-3 rounded-xl border border-slate-200 flex flex-wrap gap-2 min-h-[52px]">
+                                                {availableClasses.map(cls => {
+                                                    const isSelected = selectedClassesForGrade.includes(cls);
+                                                    return (
+                                                        <button
+                                                            key={cls}
+                                                            type="button"
+                                                            onClick={() => handleToggleClass(cls)}
+                                                            className={`
+                                                            flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-sm
+                                                            ${isSelected 
+                                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' 
+                                                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-white'}
+                                                            `}
+                                                        >
+                                                            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                                                            <span className="font-bold">{cls}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-xl border border-amber-100 flex items-center gap-2">
+                                                <RefreshCw size={16}/> لا توجد فصول مسجلة لهذا الصف.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
 
-                          <div className="flex justify-end">
-                              <button 
-                                type="button"
-                                onClick={addAssignments}
-                                disabled={selectedClassesForGrade.length === 0}
-                                className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md active:scale-95"
-                              >
-                                <Plus size={18} />
-                                إضافة الفصول المحددة للقائمة
-                              </button>
-                          </div>
-                       </div>
-                    </div>
+                            <div className="flex justify-end">
+                                <button 
+                                    type="button"
+                                    onClick={addAssignments}
+                                    disabled={selectedClassesForGrade.length === 0}
+                                    className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md active:scale-95"
+                                >
+                                    <Plus size={18} />
+                                    إضافة الفصول المحددة للقائمة
+                                </button>
+                            </div>
+                        </div>
+                        </div>
 
-                    {/* Selected Assignments List */}
-                    <div>
-                       <label className={labelClasses}>الفصول التي تم إسنادها ({assignments.length})</label>
-                       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar shadow-inner">
-                          {assignments.length > 0 ? (
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {assignments.map((assign, idx) => (
-                                   <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm group hover:border-blue-200 transition-colors">
-                                      <div className="flex items-center gap-3">
-                                         <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
-                                            <School size={18} />
-                                         </div>
-                                         <div className="flex flex-col">
-                                            <span className="text-sm font-bold text-slate-800">{assign.grade}</span>
-                                            <span className="text-xs text-slate-500">فصل (شعبة) {assign.className}</span>
-                                         </div>
-                                      </div>
-                                      <button 
-                                        type="button" 
-                                        onClick={() => removeAssignment(idx)}
-                                        className="text-slate-300 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                                        title="إزالة"
-                                      >
-                                         <Trash2 size={18} />
-                                      </button>
-                                   </div>
-                                ))}
-                             </div>
-                          ) : (
-                             <div className="h-full flex flex-col items-center justify-center text-slate-400 py-6">
-                                <School size={32} className="opacity-30 mb-2"/>
-                                <p className="text-sm">لم يتم إضافة أي فصول بعد.</p>
-                             </div>
-                          )}
-                       </div>
-                    </div>
+                        {/* Selected Assignments List */}
+                        <div>
+                        <label className={labelClasses}>الفصول التي تم إسنادها ({assignments.length})</label>
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar shadow-inner">
+                            {assignments.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {assignments.map((assign, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm group hover:border-blue-200 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
+                                                <School size={18} />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-slate-800">{assign.grade}</span>
+                                                <span className="text-xs text-slate-500">فصل (شعبة) {assign.className}</span>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => removeAssignment(idx)}
+                                            className="text-slate-300 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                                            title="إزالة"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-6">
+                                    <School size={32} className="opacity-30 mb-2"/>
+                                    <p className="text-sm">لم يتم إضافة أي فصول بعد.</p>
+                                </div>
+                            )}
+                        </div>
+                        </div>
+                        </>
+                    )}
                  </form>
               </div>
 

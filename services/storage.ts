@@ -1,26 +1,33 @@
-
 import { supabase } from '../supabaseClient';
 import { 
   Appointment, AppointmentSlot, School,
-  SchoolNews, Student, ExcuseRequest, RequestStatus, StaffUser, AttendanceRecord, AttendanceStatus, ClassAssignment, ResolvedAlert, BehaviorRecord, AdminInsight, Referral, StudentObservation, GuidanceSession, StudentPoint, ParentLink, AppNotification, ExitPermission 
+  SchoolNews, Student, ExcuseRequest, RequestStatus, StaffUser, AttendanceRecord, AttendanceStatus, ClassAssignment, ResolvedAlert, BehaviorRecord, AdminInsight, Referral, StudentObservation, GuidanceSession, StudentPoint, ParentLink, AppNotification, ExitPermission, ClassPerformance 
 } from "../types";
 import { GoogleGenAI } from "@google/genai";
 
 // --- CONSTANTS ---
-export const MINISTRY_LOGO_URL = "https://www.raed.net/img?id=1474173"; // شعار وزارة التعليم
+export const MINISTRY_LOGO_URL = "https://www.raed.net/img?id=1476894"; // شعار الوزارة الموحد الجديد
 
 // --- School Context Helpers ---
 export const getActiveSchoolId = (): string | null => {
     const school = localStorage.getItem('active_school');
     if (school) {
-        return JSON.parse(school).id;
+        try {
+            return JSON.parse(school).id;
+        } catch (e) {
+            return null;
+        }
     }
     return null;
 };
 
 export const getActiveSchool = (): School | null => {
     const school = localStorage.getItem('active_school');
-    return school ? JSON.parse(school) : null;
+    try {
+        return school ? JSON.parse(school) : null;
+    } catch (e) {
+        return null;
+    }
 };
 
 export const setActiveSchool = (school: School) => {
@@ -60,7 +67,18 @@ export const registerSchool = async (name: string, code: string, password: strin
         if (error.code === '23505') throw new Error('كود المدرسة مستخدم مسبقاً، يرجى اختيار كود آخر.');
         throw new Error(error.message);
     }
-    return { id: data.id, name: data.name, schoolCode: data.school_code, logoUrl: data.logo_url, plan: data.plan, createdAt: data.created_at } as School;
+    
+    const newSchool = { 
+        id: data.id, 
+        name: data.name, 
+        schoolCode: data.school_code, 
+        logoUrl: data.logo_url,
+        managerName: data.manager_name,
+        plan: data.plan, 
+        createdAt: data.created_at 
+    } as School;
+    
+    return newSchool;
 };
 
 export const loginSchool = async (code: string): Promise<School | null> => {
@@ -70,13 +88,26 @@ export const loginSchool = async (code: string): Promise<School | null> => {
         id: data.id, 
         name: data.name, 
         schoolCode: data.school_code, 
-        logoUrl: data.logo_url, 
+        logoUrl: data.logo_url,
+        managerName: data.manager_name,
         plan: data.plan, 
         createdAt: data.created_at 
     } as School;
 };
 
-// New Function to fetch public school info without full login logic if needed
+export const updateSchoolManager = async (managerName: string) => {
+    const school = getActiveSchool();
+    if (!school) return;
+    
+    const { error } = await supabase.from('schools').update({ manager_name: managerName }).eq('id', school.id);
+    if (error) throw new Error(error.message);
+    
+    // Update local context
+    const updatedSchool = { ...school, managerName };
+    setActiveSchool(updatedSchool);
+};
+
+// Function to fetch public school info without full login logic if needed (e.g. for landing page preview)
 export const getSchoolByCodePublic = async (code: string): Promise<School | null> => {
     return await loginSchool(code);
 };
@@ -85,26 +116,6 @@ export const verifySchoolAdminPassword = async (schoolId: string, password: stri
     const { data, error } = await supabase.from('schools').select('password').eq('id', schoolId).single();
     if (error || !data) return false;
     return data.password === password; // In production, compare hashes
-};
-
-// --- Caching System ---
-const CACHE: Record<string, { data: any, timestamp: number }> = {};
-const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
-
-export function getFromCache<T>(key: string): T | null {
-  const cached = CACHE[key];
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data as T;
-  }
-  return null;
-}
-
-const setCache = (key: string, data: any) => {
-  CACHE[key] = { data, timestamp: Date.now() };
-};
-
-export const invalidateCache = (key: string) => {
-  delete CACHE[key];
 };
 
 // --- AI Configuration ---
@@ -138,9 +149,11 @@ export const getAIConfig = (): AIConfig => {
 
 export const generateSmartContent = async (prompt: string, systemInstruction?: string): Promise<string> => {
   const config = getAIConfig();
-  if (!config.apiKey) return "عفواً، لم يتم ضبط مفتاح الذكاء الاصطناعي (API Key).";
+  // Using the key from config or directly from process.env if available
+  const apiKey = config.apiKey || process.env.API_KEY;
+  
   try {
-    const ai = new GoogleGenAI({ apiKey: config.apiKey });
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     // Use Thinking Mode for complex generation
     const response = await ai.models.generateContent({ 
         model: 'gemini-3-pro-preview', 
@@ -347,9 +360,9 @@ export const generateUserSpecificBotContext = async (): Promise<{role: string, c
 export const analyzeSentiment = async (text: string): Promise<'positive' | 'negative' | 'neutral'> => {
     try {
         const config = getAIConfig();
-        if (!config.apiKey) return 'neutral';
+        const apiKey = config.apiKey || process.env.API_KEY;
         // Use Flash for simple sentiment analysis to keep it fast and low cost
-        const ai = new GoogleGenAI({ apiKey: config.apiKey });
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `Analyze the sentiment of this text (Student Report). Return ONLY one word: 'positive', 'negative', or 'neutral'. Text: "${text}"`
@@ -396,6 +409,8 @@ const mapReferralToDB = (r: Referral) => ({ school_id: getActiveSchoolId(), stud
 const mapInsightFromDB = (i: any): AdminInsight => ({ id: i.id, schoolId: i.school_id, targetRole: i.target_role, content: i.content, isRead: i.is_read, createdAt: i.created_at });
 const mapSessionFromDB = (s: any): GuidanceSession => ({ id: s.id, schoolId: s.school_id, studentId: s.student_id, studentName: s.student_name, date: s.date, sessionType: s.session_type, topic: s.topic, recommendations: s.recommendations, status: s.status });
 const mapSessionToDB = (s: GuidanceSession) => ({ school_id: getActiveSchoolId(), student_id: s.studentId, student_name: s.studentName, date: s.date, session_type: s.sessionType, topic: s.topic, recommendations: s.recommendations, status: s.status });
+const mapClassPerformanceFromDB = (cp: any): ClassPerformance => ({ id: cp.id, schoolId: cp.school_id, studentId: cp.student_id, studentName: cp.student_name, grade: cp.grade, className: cp.class_name, date: cp.date, subject: cp.subject, participationScore: cp.participation_score, homeworkStatus: cp.homework_status, behaviorNote: cp.behavior_note, createdBy: cp.created_by });
+const mapClassPerformanceToDB = (cp: ClassPerformance) => ({ school_id: getActiveSchoolId(), student_id: cp.studentId, student_name: cp.studentName, grade: cp.grade, class_name: cp.className, date: cp.date, subject: cp.subject, participation_score: cp.participationScore, homework_status: cp.homeworkStatus, behavior_note: cp.behaviorNote, created_by: cp.createdBy });
 
 export const testSupabaseConnection = async (): Promise<{ success: boolean; message: string }> => { try { const { data, error } = await supabase.from('schools').select('count', { count: 'exact', head: true }); if (error) throw error; return { success: true, message: `Connected` }; } catch (error: any) { return { success: false, message: `Failed: ${error.message}` }; } };
 
@@ -550,11 +565,82 @@ export const getAvailableClassesForGrade = async (grade: string) => {
     if (!data) return []; return Array.from(new Set(data.map((s: any) => s.class_name))).sort(); 
 };
 
+// --- NEW CLASS PERFORMANCE LOGIC ---
+export const saveClassPerformance = async (records: ClassPerformance[]) => {
+    const schoolId = getActiveSchoolId();
+    if(!schoolId) return;
+    
+    // Upsert performance records
+    // Since there's no unique constraint on (student_id, date, subject) yet in SQL provided, 
+    // we should ideally delete existing for this day/class/subject then insert, or use upsert if constraint existed.
+    // For now, let's delete existing records for these students on this date to avoid duplicates if re-submitting.
+    if(records.length > 0) {
+        const date = records[0].date;
+        const studentIds = records.map(r => r.studentId);
+        
+        // Use subject if available to delete specific subject records, otherwise it might wipe other subjects for same day
+        const subject = records[0].subject;
+        let deleteQuery = supabase.from('class_performance')
+            .delete()
+            .eq('school_id', schoolId)
+            .eq('date', date)
+            .in('student_id', studentIds);
+            
+        if (subject) {
+            deleteQuery = deleteQuery.eq('subject', subject);
+        }
+
+        await deleteQuery;
+            
+        const { error } = await supabase.from('class_performance').insert(records.map(mapClassPerformanceToDB));
+        if (error) throw new Error(error.message);
+    }
+};
+
+export const getClassPerformance = async (date: string, grade: string, className: string) => {
+    const schoolId = getActiveSchoolId();
+    if(!schoolId) return [];
+    const { data, error } = await supabase.from('class_performance')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('date', date)
+        .eq('grade', grade)
+        .eq('class_name', className);
+        
+    if(error) return [];
+    return data.map(mapClassPerformanceFromDB);
+};
+
+export const getStudentDailyPerformance = async (studentId: string, date: string) => {
+    const schoolId = getActiveSchoolId();
+    if(!schoolId) return [];
+    const { data, error } = await supabase.from('class_performance')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('student_id', studentId)
+        .eq('date', date);
+        
+    if(error) return [];
+    return data.map(mapClassPerformanceFromDB);
+};
+
+export const getTeacherPerformanceStats = async (grade?: string, className?: string) => {
+    const schoolId = getActiveSchoolId();
+    if(!schoolId) return [];
+    let query = supabase.from('class_performance').select('*').eq('school_id', schoolId);
+    if(grade && className) {
+        query = query.eq('grade', grade).eq('class_name', className);
+    }
+    const { data, error } = await query;
+    if(error) return [];
+    return data.map(mapClassPerformanceFromDB);
+};
+
 export const saveAttendanceRecord = async (record: AttendanceRecord) => { 
     const schoolId = getActiveSchoolId();
     if(!schoolId) throw new Error("No school selected");
 
-    // 1. Save or Update the Record
+    // 1. Save or Update the Record (Database Op 1)
     const { data: existing } = await supabase.from('attendance').select('id').eq('school_id', schoolId).eq('date', record.date).eq('grade', record.grade).eq('class_name', record.className).single();
     if (existing) {
         const { error } = await supabase.from('attendance').update(mapAttendanceToDB(record)).eq('id', existing.id);
@@ -565,18 +651,97 @@ export const saveAttendanceRecord = async (record: AttendanceRecord) => {
     }
 
     // 2. TRIGGER REAL-TIME NOTIFICATIONS
-    // We iterate through the student records to check for Absence or Lateness
     const notificationBatch: any[] = [];
     
-    record.records.forEach(stu => {
+    // OPTIMIZATION: Fetch required data ONCE to prevent N+1 problem
+    // A. Staff list for Admin alerts
+    const staffList = await getStaffUsers(); 
+    const riskStaff = staffList.filter(u => u.permissions?.includes('deputy') || u.permissions?.includes('students'));
+
+    // B. Class Attendance History (for streak calculation)
+    // We get all days for this class to calculate streaks locally
+    const { data: classHistoryRaw } = await supabase.from('attendance')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('grade', record.grade)
+        .eq('class_name', record.className)
+        .order('date', { ascending: false }); // Newest first
+    
+    const classHistory = classHistoryRaw ? classHistoryRaw.map(mapAttendanceFromDB) : [];
+
+    // C. All Requests (to check excuses) - We fetch all requests for the school to allow local filtering
+    // Optimized: In a real large app, we would filter by student IDs, but for this scale, fetching all or by IDs is fine.
+    // Let's filter by the student IDs involved in this record for better performance if possible
+    const studentIds = record.records.map(s => s.studentId);
+    const { data: requestsData } = await supabase.from('requests')
+        .select('*')
+        .eq('school_id', schoolId)
+        .in('student_id', studentIds);
+    
+    const relevantRequests = requestsData ? requestsData.map(mapRequestFromDB) : [];
+
+    for (const stu of record.records) {
         if (stu.status === AttendanceStatus.ABSENT) {
+            // A. Daily Absence Notification
             notificationBatch.push({
                 school_id: schoolId,
-                target_user_id: stu.studentId, // We use studentId to target the parent
+                target_user_id: stu.studentId, 
                 type: 'alert',
                 title: 'تنبيه غياب',
                 message: `نحيطكم علماً بأن الطالب ${stu.studentName} تغيب عن المدرسة بتاريخ ${record.date}. يرجى تقديم عذر عبر البوابة.`
             });
+
+            // B. Check for Consecutive Absences (Threshold: 3)
+            // Filter requests for this student
+            const studentRequests = relevantRequests.filter(r => r.studentId === stu.studentId);
+
+            let streak = 0;
+            // Iterate through class history days
+            for (const dayRecord of classHistory) {
+                // Find student status in this day's record
+                const studentDailyStatus = dayRecord.records.find(r => r.studentId === stu.studentId);
+                
+                if (studentDailyStatus && studentDailyStatus.status === AttendanceStatus.ABSENT) {
+                    // Check if this specific day is excused
+                    const hasExcuse = studentRequests.some(r => r.date === dayRecord.date && r.status !== RequestStatus.REJECTED);
+                    if (!hasExcuse) {
+                        streak++;
+                    } else {
+                        break; // Excused day breaks streak
+                    }
+                } else if (studentDailyStatus && studentDailyStatus.status === AttendanceStatus.PRESENT) {
+                    break; // Present breaks streak
+                }
+                // If Late, we usually ignore or count as present for "absence streak", breaking it? 
+                // Usually Late breaks Absence streak.
+                else if (studentDailyStatus) {
+                    break;
+                }
+            }
+
+            // Trigger notification if streak reaches exactly 3
+            if (streak === 3) {
+                 // 1. Notify Parent
+                 notificationBatch.push({
+                     school_id: schoolId,
+                     target_user_id: stu.studentId,
+                     type: 'alert',
+                     title: 'إنذار انقطاع (الدرجة الأولى)',
+                     message: `تنبيه هام: تغيب الطالب ${stu.studentName} لليوم الثالث على التوالي بدون عذر. يرجى مراجعة المدرسة فوراً.`
+                 });
+
+                 // 2. Notify Staff
+                 riskStaff.forEach(s => {
+                     notificationBatch.push({
+                         school_id: schoolId,
+                         target_user_id: s.id,
+                         type: 'alert',
+                         title: 'مؤشر خطر غياب',
+                         message: `الطالب ${stu.studentName} (${record.grade}) وصل لـ 3 أيام غياب متصل.`
+                     });
+                 });
+            }
+
         } else if (stu.status === AttendanceStatus.LATE) {
             notificationBatch.push({
                 school_id: schoolId,
@@ -586,13 +751,11 @@ export const saveAttendanceRecord = async (record: AttendanceRecord) => {
                 message: `تم رصد تأخر الطالب ${stu.studentName} عن الطابور الصباحي بتاريخ ${record.date}.`
             });
         }
-    });
+    }
 
-    // Send notifications in bulk if there are any
     if (notificationBatch.length > 0) {
-        // Warning: This could be large for a whole school, but for a class it's fine.
         const { error } = await supabase.from('notifications').insert(notificationBatch);
-        if (error) console.error("Failed to send attendance notifications:", error);
+        if (error) console.error("Failed to send notifications:", error);
     }
 };
 

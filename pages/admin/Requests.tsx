@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Check, X, Eye, Calendar, Filter, MessageCircle, Sparkles, Loader2, Copy, Search, MoreHorizontal, FileText, User, RefreshCw, History, ChevronDown, ChevronUp, BrainCircuit, Send, Paperclip, School, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { getRequests, updateRequestStatus, invalidateCache, getStudentAttendanceHistory, generateSmartContent, sendAdminInsight } from '../../services/storage';
+import { getRequests, updateRequestStatus, getStudentAttendanceHistory, generateSmartContent, sendAdminInsight } from '../../services/storage';
 import { RequestStatus, ExcuseRequest, AttendanceStatus } from '../../types';
 
 const Requests: React.FC = () => {

@@ -1,4 +1,3 @@
-
 export enum RequestStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
@@ -11,6 +10,7 @@ export interface School {
   schoolCode: string; // Unique code for login (e.g. ZENKI)
   logoUrl?: string;
   contactPhone?: string;
+  managerName?: string; // New field for the manager's name
   plan: 'free' | 'pro';
   createdAt: string;
 }
@@ -23,6 +23,7 @@ export interface Student {
   grade: string;
   className: string;
   phone: string;
+  points?: number; // Optional for display
 }
 
 export interface ExcuseRequest {
@@ -53,6 +54,7 @@ export interface DashboardStats {
 export interface ClassAssignment {
   grade: string;
   className: string;
+  subject?: string; // Added subject field
 }
 
 export interface StaffUser {
@@ -62,6 +64,7 @@ export interface StaffUser {
   passcode: string; // Changed: Passcode only
   assignments: ClassAssignment[]; // Changed: Support multiple classes
   permissions?: string[]; // New: List of allowed feature keys
+  role?: 'teacher' | 'admin_staff'; // New: Explicit Role
 }
 
 export enum AttendanceStatus {
@@ -82,6 +85,21 @@ export interface AttendanceRecord {
     studentName: string;
     status: AttendanceStatus;
   }[];
+}
+
+export interface ClassPerformance {
+  id: string;
+  schoolId?: string;
+  studentId: string;
+  studentName: string;
+  grade: string;
+  className: string;
+  date: string;
+  subject?: string;
+  participationScore: number;
+  homeworkStatus: boolean;
+  behaviorNote?: string;
+  createdBy: string;
 }
 
 export interface ResolvedAlert {
@@ -213,7 +231,6 @@ export interface SchoolNews {
   createdAt: string;
 }
 
-// New Types for Appointments
 export interface AppointmentSlot {
   id: string;
   schoolId?: string;
@@ -235,11 +252,10 @@ export interface Appointment {
   visitReason: string;
   status: 'pending' | 'completed' | 'cancelled' | 'missed';
   arrivedAt?: string;
-  slot?: AppointmentSlot; // Joined data
   createdAt: string;
+  slot?: AppointmentSlot; // For joined data
 }
 
-// New Type for Student Exit Permission (Istithan)
 export interface ExitPermission {
   id: string;
   schoolId?: string;
@@ -249,10 +265,10 @@ export interface ExitPermission {
   className: string;
   parentName: string;
   parentPhone: string;
-  reason?: string;
+  reason: string;
   createdBy: string;
-  createdByName?: string; // New: Authorizer Name
-  status: 'pending_pickup' | 'completed' | 'expired';
+  createdByName?: string;
+  status: 'pending_pickup' | 'completed';
   createdAt: string;
   completedAt?: string;
 }

@@ -28,45 +28,16 @@ import {
   getStudentObservations,
   updateStudentObservation,
   deleteStudentObservation,
-  getActiveSchool,
-  MINISTRY_LOGO_URL
+  getActiveSchool
 } from '../../services/storage';
 import { Student, BehaviorRecord, StaffUser, Referral, StudentObservation } from '../../types';
 import { BEHAVIOR_VIOLATIONS, GRADES } from '../../constants';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import AttendanceMonitor from './AttendanceMonitor';
-
-// --- Official Header Component (Print Only) ---
-const OfficialHeader = ({ schoolName, subTitle, schoolLogo }: { schoolName: string, subTitle: string, schoolLogo?: string }) => (
-  <div className="print-header">
-    <div className="print-header-right">
-        <p>المملكة العربية السعودية</p>
-        <p>وزارة التعليم</p>
-        <p>إدارة التعليم ....................</p>
-        <p>{schoolName}</p>
-        <p>{subTitle}</p>
-    </div>
-    <div className="print-header-center flex flex-col items-center">
-        {/* Always show Ministry Logo as primary, School Logo underneath or side if exists */}
-        <img src={MINISTRY_LOGO_URL} alt="وزارة التعليم" className="print-logo h-20 mb-2" />
-        {schoolLogo && <img src={schoolLogo} alt={schoolName} className="h-12 object-contain" />}
-    </div>
-    <div className="print-header-left">
-         <p>Kingdom of Saudi Arabia</p>
-         <p>Ministry of Education</p>
-         <p>Student Affairs</p>
-         <div className="mt-2 text-center text-xs font-bold border-2 border-black p-1 inline-block">
-            {new Date().toLocaleDateString('en-GB')}
-         </div>
-    </div>
-  </div>
-);
+import PrintLayout from '../../components/PrintLayout';
 
 const StaffDeputy: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
-  const activeSchool = getActiveSchool();
-  const SCHOOL_NAME = activeSchool?.name || "المدرسة";
-  const SCHOOL_LOGO = activeSchool?.logoUrl;
   
   // Navigation View State
   const [activeView, setActiveView] = useState<'dashboard' | 'attendance' | 'referrals' | 'log' | 'positive'>('dashboard');
@@ -411,54 +382,37 @@ const StaffDeputy: React.FC = () => {
   return (
     <>
       <div id="print-container" className="hidden print:block text-[14px] leading-relaxed" dir="rtl">
-        <div className="print-page-a4">
-            <img src={MINISTRY_LOGO_URL} className="print-watermark" alt="Watermark" />
-            
-            {(printMode === 'commitment' || printMode === 'summons') && recordToPrint && (
-            <div>
-                <OfficialHeader schoolName={SCHOOL_NAME} subTitle="وكالة شؤون الطلاب" schoolLogo={SCHOOL_LOGO} />
-                <div className="mt-8 px-4 relative z-10">
-                    <h1 className="official-title">{printMode === 'commitment' ? 'تعهد خطي (انضباطي)' : 'خطاب استدعاء ولي أمر'}</h1>
-                    {printMode === 'commitment' ? (
-                        <div className="text-right space-y-6 text-lg font-medium mt-6">
-                            <p>أقر أنا الطالب/ة: <strong>{recordToPrint.studentName}</strong> بالصف: <strong>{recordToPrint.grade} - {recordToPrint.className}</strong></p>
-                            <p>بأنني قمت بالمخالفة التالية:</p>
-                            <div className="bg-gray-50 border-2 border-black p-4 text-center font-bold text-xl my-4">{recordToPrint.violationName}</div>
-                            <p className="leading-loose text-justify">وأتعهد بعدم تكرار هذا السلوك مستقبلاً، والالتزام بالأنظمة والتعليمات المدرسية.</p>
-                        </div>
-                    ) : (
-                        <div className="text-lg leading-loose space-y-6 font-medium mt-6 text-justify">
-                            <p>المكرم ولي أمر الطالب.. وفقه الله</p>
-                            <p>نفيدكم بأنه تم رصد ملاحظات انضباطية/سلوكية على ابنكم <strong>({recordToPrint.studentName})</strong>، والمتمثلة في: <strong>{recordToPrint.violationName}</strong>.</p>
-                            <p>نأمل حضوركم للمدرسة يوم ..................... الموافق ..................... لمناقشة وضع الطالب.</p>
-                        </div>
-                    )}
-                    <div className="mt-16 flex justify-between px-8">
-                        <div className="text-center"><p className="font-bold mb-8">ولي الأمر</p><p>.............................</p></div>
-                        <div className="text-center"><p className="font-bold mb-8">وكيل شؤون الطلاب</p><p>{currentUser?.name}</p></div>
+        {(printMode === 'commitment' || printMode === 'summons') && recordToPrint && (
+            <PrintLayout title={printMode === 'commitment' ? 'تعهد خطي (انضباطي)' : 'خطاب استدعاء ولي أمر'}>
+                {printMode === 'commitment' ? (
+                    <div className="text-right space-y-6 text-lg font-medium mt-6">
+                        <p>أقر أنا الطالب/ة: <strong>{recordToPrint.studentName}</strong> بالصف: <strong>{recordToPrint.grade} - {recordToPrint.className}</strong></p>
+                        <p>بأنني قمت بالمخالفة التالية:</p>
+                        <div className="bg-gray-50 border-2 border-black p-4 text-center font-bold text-xl my-4">{recordToPrint.violationName}</div>
+                        <p className="leading-loose text-justify">وأتعهد بعدم تكرار هذا السلوك مستقبلاً، والالتزام بالأنظمة والتعليمات المدرسية.</p>
                     </div>
-                </div>
-            </div>
-            )}
+                ) : (
+                    <div className="text-lg leading-loose space-y-6 font-medium mt-6 text-justify">
+                        <p>المكرم ولي أمر الطالب.. وفقه الله</p>
+                        <p>نفيدكم بأنه تم رصد ملاحظات انضباطية/سلوكية على ابنكم <strong>({recordToPrint.studentName})</strong>، والمتمثلة في: <strong>{recordToPrint.violationName}</strong>.</p>
+                        <p>نأمل حضوركم للمدرسة يوم ..................... الموافق ..................... لمناقشة وضع الطالب.</p>
+                    </div>
+                )}
+            </PrintLayout>
+        )}
 
-            {printMode === 'certificate' && studentToPrint && certificateData && (
-                <div className="h-full flex flex-col pt-10">
-                    <OfficialHeader schoolName={SCHOOL_NAME} subTitle="" schoolLogo={SCHOOL_LOGO} />
-                    <div className="flex-1 flex flex-col items-center justify-center text-center relative z-10">
-                        <h1 className="text-4xl font-extrabold mb-4">شهادة شكر وتقدير</h1>
-                        <p className="text-xl mb-6">تسر إدارة المدرسة أن تتقدم بالشكر للطالب:</p>
-                        <h2 className="text-3xl font-bold mb-6 border-b-2 border-black pb-2 px-8">{studentToPrint.name}</h2>
-                        <p className="text-xl mb-2">وذلك لتميزه في:</p>
-                        <h3 className="text-2xl font-bold mb-8">{certificateData.reason}</h3>
-                        <p className="text-lg">متمنين له دوام التوفيق والنجاح.</p>
-                    </div>
-                    <div className="flex justify-between px-10 mt-10">
-                        <div className="text-center"><p className="font-bold mb-4">وكيل شؤون الطلاب</p><p>{currentUser?.name}</p></div>
-                        <div className="text-center"><p className="font-bold mb-4">مدير المدرسة</p><p>.............................</p></div>
-                    </div>
+        {printMode === 'certificate' && studentToPrint && certificateData && (
+            <PrintLayout title="">
+                <div className="flex-1 flex flex-col items-center justify-center text-center relative z-10 pt-10">
+                    <h1 className="text-4xl font-extrabold mb-4">شهادة شكر وتقدير</h1>
+                    <p className="text-xl mb-6">تسر إدارة المدرسة أن تتقدم بالشكر للطالب:</p>
+                    <h2 className="text-3xl font-bold mb-6 border-b-2 border-black pb-2 px-8">{studentToPrint.name}</h2>
+                    <p className="text-xl mb-2">وذلك لتميزه في:</p>
+                    <h3 className="text-2xl font-bold mb-8">{certificateData.reason}</h3>
+                    <p className="text-lg">متمنين له دوام التوفيق والنجاح.</p>
                 </div>
-            )}
-        </div>
+            </PrintLayout>
+        )}
       </div>
 
       <div className="space-y-6 pb-20 animate-fade-in no-print">
@@ -518,25 +472,6 @@ const StaffDeputy: React.FC = () => {
                                     </div>
                                     <p className="text-sm font-bold text-red-700 mb-1">{rec.violationName}</p>
                                     <p className="text-xs text-slate-500">{rec.actionTaken}</p>
-                                    <div className="space-y-2">
-                                        <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg inline-block border border-slate-100">الإجراء: {rec.actionTaken}</p>
-                                        
-                                        {/* Updated: Parent Feedback Section */}
-                                        {rec.parentFeedback && (
-                                            <div className="flex items-start gap-2 bg-purple-50 p-2.5 rounded-xl border border-purple-100 mt-2 animate-fade-in">
-                                                <MessageCircle size={16} className="text-purple-600 mt-0.5 shrink-0"/>
-                                                <div className="flex-1">
-                                                    <span className="text-[10px] font-bold text-purple-700 block mb-0.5">رد ولي الأمر (عبر البوابة):</span>
-                                                    <p className="text-xs text-slate-700 leading-relaxed font-medium">{rec.parentFeedback}</p>
-                                                    {rec.parentViewedAt && (
-                                                        <span className="text-[9px] text-purple-400 mt-1 block">
-                                                            تم الرد في: {new Date(rec.parentViewedAt).toLocaleDateString('ar-SA')}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
                                 </div>
                                 <div className="flex gap-2 items-center">
                                     <button onClick={() => handlePrintViolationAction(rec, 'summons')} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200" title="استدعاء"><FileWarning size={16}/></button>

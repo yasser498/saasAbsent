@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Calendar, Printer, Loader2, Sparkles, Send, FileSpreadsheet, AlertCircle, CheckCircle, FileText, X, User } from 'lucide-react';
-import { getDailyAttendanceReport, generateSmartContent, sendAdminInsight, getRequests, getActiveSchool, MINISTRY_LOGO_URL } from '../../services/storage';
+import { getDailyAttendanceReport, generateSmartContent, sendAdminInsight, getRequests, getActiveSchool } from '../../services/storage';
 import { AttendanceStatus, RequestStatus, ExcuseRequest } from '../../types';
+import PrintLayout from '../../components/PrintLayout';
 
 const AttendanceReports: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -17,11 +18,6 @@ const AttendanceReports: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-
-  // School Info
-  const activeSchool = getActiveSchool();
-  const SCHOOL_NAME = activeSchool?.name || "المدرسة";
-  const SCHOOL_LOGO = activeSchool?.logoUrl;
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -93,106 +89,69 @@ const AttendanceReports: React.FC = () => {
         
         {/* UNIFIED PRINT TEMPLATE */}
         <div id="print-area" className="hidden" dir="rtl">
-            {/* Header */}
-            <div className="print-header">
-                <div className="print-header-right">
-                    <p>المملكة العربية السعودية</p>
-                    <p>وزارة التعليم</p>
-                    <p>{SCHOOL_NAME}</p>
-                </div>
-                <div className="print-header-center flex flex-col items-center">
-                    <img src={MINISTRY_LOGO_URL} alt="Logo" className="print-logo mx-auto h-20 mb-2" />
-                    {SCHOOL_LOGO && <img src={SCHOOL_LOGO} className="h-10 object-contain" alt="School Logo"/>}
-                </div>
-                <div className="print-header-left">
-                    <p>Ministry of Education</p>
-                    <p>Student Attendance</p>
-                    <p>{new Date().toLocaleDateString('en-GB')}</p>
-                </div>
-            </div>
-
-            {/* Title & Date */}
-            <div className="text-center mb-6">
-                <h1 className="text-xl font-bold border-b-2 border-black inline-block pb-1">تقرير الغياب اليومي</h1>
-                <p className="text-lg font-mono font-bold mt-2">{selectedDate}</p>
-            </div>
-
-            {/* Stats Summary */}
-            {reportData && (
-                <div className="flex justify-between gap-4 mb-6 text-center border-b border-black pb-4">
-                    <div className="flex-1 border border-black p-2">
-                        <div className="font-bold text-sm">إجمالي الحضور</div>
-                        <div className="text-xl font-bold">{reportData.totalPresent}</div>
+            <PrintLayout title={`تقرير الغياب اليومي - ${selectedDate}`}>
+                {/* Stats Summary */}
+                {reportData && (
+                    <div className="flex justify-between gap-4 mb-6 text-center border-b border-black pb-4">
+                        <div className="flex-1 border border-black p-2">
+                            <div className="font-bold text-sm">إجمالي الحضور</div>
+                            <div className="text-xl font-bold">{reportData.totalPresent}</div>
+                        </div>
+                        <div className="flex-1 border border-black p-2">
+                            <div className="font-bold text-sm">إجمالي الغياب</div>
+                            <div className="text-xl font-bold">{reportData.totalAbsent}</div>
+                        </div>
+                        <div className="flex-1 border border-black p-2">
+                            <div className="font-bold text-sm">إجمالي التأخر</div>
+                            <div className="text-xl font-bold">{reportData.totalLate}</div>
+                        </div>
                     </div>
-                    <div className="flex-1 border border-black p-2">
-                        <div className="font-bold text-sm">إجمالي الغياب</div>
-                        <div className="text-xl font-bold">{reportData.totalAbsent}</div>
-                    </div>
-                    <div className="flex-1 border border-black p-2">
-                        <div className="font-bold text-sm">إجمالي التأخر</div>
-                        <div className="text-xl font-bold">{reportData.totalLate}</div>
-                    </div>
-                </div>
-            )}
+                )}
 
-            {/* Main Table */}
-            {reportData && (
-                <table className="w-full text-right border-collapse">
-                    <thead>
-                        <tr>
-                            <th style={{ width: '5%' }}>م</th>
-                            <th style={{ width: '30%' }}>الطالب</th>
-                            <th style={{ width: '25%' }}>الصف / الفصل</th>
-                            <th style={{ width: '20%' }}>حالة الحضور</th>
-                            <th style={{ width: '20%' }}>حالة العذر</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {reportData.details.length === 0 ? (
-                            <tr>
-                                <td colSpan={5} className="p-8 text-center font-bold">
-                                    سجل نظيف! لا يوجد غياب أو تأخر مسجل اليوم.
-                                </td>
+                {/* Main Table */}
+                {reportData && (
+                    <table className="w-full text-right border-collapse border border-black text-sm">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-black p-2 text-center w-10">م</th>
+                                <th className="border border-black p-2 w-1/3">الطالب</th>
+                                <th className="border border-black p-2">الصف / الفصل</th>
+                                <th className="border border-black p-2">حالة الحضور</th>
+                                <th className="border border-black p-2">حالة العذر</th>
                             </tr>
-                        ) : (
-                            reportData.details.map((item, index) => {
-                                const excuseStatus = getExcuseStatus(item.studentId, item.studentName);
-                                return (
-                                <tr key={index}>
-                                    <td>{index + 1}</td>
-                                    <td className="font-bold">
-                                        {item.studentName}
-                                        <div className="text-[10px] mt-1">{item.studentId}</div>
-                                    </td>
-                                    <td>{item.grade} - {item.className}</td>
-                                    <td>{item.status === AttendanceStatus.ABSENT ? 'غياب' : 'تأخر'}</td>
-                                    <td>
-                                        {excuseStatus ? (
-                                            excuseStatus === RequestStatus.APPROVED ? 'مقبول' :
-                                            excuseStatus === RequestStatus.REJECTED ? 'مرفوض' : 'قيد المراجعة'
-                                        ) : 'لا يوجد عذر'}
+                        </thead>
+                        <tbody>
+                            {reportData.details.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="p-8 text-center font-bold border border-black">
+                                        سجل نظيف! لا يوجد غياب أو تأخر مسجل اليوم.
                                     </td>
                                 </tr>
-                            )})
-                        )}
-                    </tbody>
-                </table>
-            )}
-
-            {/* Footer */}
-            <div className="mt-16 flex justify-between px-12">
-                 <div className="text-center">
-                     <p className="font-bold mb-8">وكيل الشؤون الطلابية</p>
-                     <p>.............................</p>
-                 </div>
-                 <div className="text-center">
-                     <p className="font-bold mb-8">مدير المدرسة</p>
-                     <p>.............................</p>
-                 </div>
-            </div>
-            <div className="mt-8 text-center text-[10px] border-t pt-2">
-                 تم استخراج هذا التقرير آلياً من نظام عذر الإلكتروني - {new Date().toLocaleDateString('ar-SA')}
-            </div>
+                            ) : (
+                                reportData.details.map((item, index) => {
+                                    const excuseStatus = getExcuseStatus(item.studentId, item.studentName);
+                                    return (
+                                    <tr key={index}>
+                                        <td className="border border-black p-2 text-center">{index + 1}</td>
+                                        <td className="border border-black p-2 font-bold">
+                                            {item.studentName}
+                                            <div className="text-[10px] mt-1">{item.studentId}</div>
+                                        </td>
+                                        <td className="border border-black p-2">{item.grade} - {item.className}</td>
+                                        <td className="border border-black p-2">{item.status === AttendanceStatus.ABSENT ? 'غياب' : 'تأخر'}</td>
+                                        <td className="border border-black p-2">
+                                            {excuseStatus ? (
+                                                excuseStatus === RequestStatus.APPROVED ? 'مقبول' :
+                                                excuseStatus === RequestStatus.REJECTED ? 'مرفوض' : 'قيد المراجعة'
+                                            ) : 'لا يوجد عذر'}
+                                        </td>
+                                    </tr>
+                                )})
+                            )}
+                        </tbody>
+                    </table>
+                )}
+            </PrintLayout>
         </div>
 
         {/* SCREEN UI (NO CHANGES TO LOGIC) */}
@@ -226,7 +185,7 @@ const AttendanceReports: React.FC = () => {
             </div>
         ) : (
             <div className="no-print">
-                
+                {/* ... (Existing Screen UI Components - Cards, Table, AI Analysis) ... */}
                 {/* AI Section (No Print) */}
                 <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-2xl border border-indigo-100 no-print shadow-sm mb-8">
                     <div className="flex justify-between items-start mb-4">

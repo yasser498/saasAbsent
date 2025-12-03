@@ -15,6 +15,7 @@ export const INITIAL_STUDENTS: Student[] = [
 
 export const PERMISSIONS = [
   { key: 'attendance', label: 'رصد الحضور والغياب' },
+  { key: 'daily_followup', label: 'المتابعة الأكاديمية والتقييم' },
   { key: 'requests', label: 'متابعة طلبات الأعذار' },
   { key: 'students', label: 'دليل الطلاب (الموجه الطلابي)' },
   { key: 'contact_directory', label: 'دليل التواصل (للمعلمين)' },

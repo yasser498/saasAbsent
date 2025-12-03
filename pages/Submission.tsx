@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { Upload, CheckCircle, Calendar, User, FileText, Sparkles, AlertCircle, ChevronRight, Home, Paperclip, CalendarDays, Clock, ArrowRight } from 'lucide-react';
-import { getStudents, addRequest, uploadFile } from '../services/storage';
+import { getStudents, addRequest, uploadFile, getActiveSchool } from '../services/storage';
 import { Student, ExcuseRequest, RequestStatus } from '../types';
 import { GRADES } from '../constants';
 
@@ -169,6 +169,19 @@ const Submission: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleReturn = () => {
+      const parentId = localStorage.getItem('ozr_parent_id');
+      const activeSchool = getActiveSchool();
+      
+      if (parentId) {
+          navigate('/inquiry');
+      } else if (activeSchool) {
+          navigate(`/s/${activeSchool.schoolCode}`);
+      } else {
+          navigate('/');
+      }
   };
 
   const today = new Date();
@@ -352,7 +365,7 @@ const Submission: React.FC = () => {
                 <p className="text-slate-500 mb-8 max-w-xs mx-auto">سيتم مراجعة العذر من قبل إدارة المدرسة والرد عليكم قريباً.</p>
                 
                 <div className="space-y-3">
-                    <button onClick={() => navigate('/')} className="w-full py-4 bg-slate-100 text-slate-700 font-bold rounded-2xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                    <button onClick={handleReturn} className="w-full py-4 bg-slate-100 text-slate-700 font-bold rounded-2xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
                         <Home size={18}/> العودة للرئيسية
                     </button>
                     <button onClick={() => window.location.reload()} className="w-full py-4 bg-white border-2 border-slate-100 text-blue-600 font-bold rounded-2xl hover:border-blue-100 hover:bg-blue-50 transition-colors">
