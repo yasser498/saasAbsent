@@ -306,9 +306,13 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
   );
 
   const handleGlobalLogout = () => {
+      // This will trigger the logout passed from App.tsx (which preserves school context)
       if (onLogout) onLogout();
-      else {
-          logoutSchool();
+  };
+
+  const handleChangeSchool = () => {
+      if(window.confirm('هل أنت متأكد من تغيير المدرسة؟ سيتم تسجيل الخروج.')) {
+          logoutSchool(); // Clears everything including school context
           navigate('/');
       }
   };
@@ -358,7 +362,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
 
         {/* Header Section */}
         <div className={`p-6 hidden md:flex flex-col items-center text-center gap-3 shrink-0 transition-all ${isSidebarCollapsed ? 'py-6 px-2' : ''}`}>
-          <div className="relative group cursor-pointer">
+          <div className="relative group cursor-pointer" onClick={() => navigate(activeSchool ? `/s/${activeSchool.schoolCode}` : '/')}>
              <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 rounded-full group-hover:opacity-30 transition-opacity"></div>
              {SCHOOL_LOGO ? (
                  <img src={SCHOOL_LOGO} alt="School Logo" className={`relative object-contain drop-shadow-md transition-all duration-500 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-24 h-24 group-hover:scale-105'}`} />
@@ -498,7 +502,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role = 'public', onLogout }) 
           {/* Public Logout (Back to School Selection) */}
           {role === 'public' && (
               <button 
-                onClick={() => { logoutSchool(); navigate('/'); }}
+                onClick={handleChangeSchool}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors duration-200 font-bold shrink-0 mt-4 border-t border-slate-100 pt-4 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
                 title="تغيير المدرسة"
               >

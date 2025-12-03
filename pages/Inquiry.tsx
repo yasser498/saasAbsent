@@ -4,7 +4,7 @@ import {
   Search, User, School, Copy, Check, CalendarDays, AlertCircle, Loader2, 
   FileText, ShieldAlert, Star, MessageSquare, Send, CheckCircle, Clock, Plus, Users, Bell, 
   LogOut, ChevronRight, ArrowLeft, Activity, ChevronLeft, Archive, AlertTriangle, 
-  Newspaper, CreditCard, X, Sparkles, CalendarCheck, QrCode, Paperclip, Printer, LogOut as ExitIcon, Calendar, Medal, Trophy, Phone, ArrowRight, Info, BellRing, MapPin, ScanLine, FilePlus
+  Newspaper, CreditCard, X, Sparkles, CalendarCheck, QrCode, Paperclip, Printer, LogOut as ExitIcon, Calendar, Medal, Trophy, Phone, ArrowRight, Info, BellRing, MapPin, ScanLine, FilePlus, Download, Share2
 } from 'lucide-react';
 import { 
   getStudentByCivilId, getRequestsByStudentId, getStudentAttendanceHistory, 
@@ -21,6 +21,8 @@ import {
 import { supabase } from '../supabaseClient'; 
 
 const { useNavigate } = ReactRouterDOM as any;
+
+declare var html2canvas: any;
 
 const Inquiry: React.FC = () => {
   const navigate = useNavigate();
@@ -194,6 +196,39 @@ const Inquiry: React.FC = () => {
       } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
+  // Helper to download cards
+  const downloadCard = async (elementId: string, fileName: string) => {
+      if (typeof html2canvas === 'undefined') {
+          alert("جاري تحميل المكتبة، يرجى المحاولة مرة أخرى بعد ثوانٍ.");
+          return;
+      }
+      
+      const element = document.getElementById(elementId);
+      if (!element) return;
+
+      try {
+          const originalStyle = element.style.cssText;
+          element.style.transform = 'none';
+          element.style.boxShadow = 'none';
+          
+          const canvas = await html2canvas(element, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: null 
+          });
+          
+          element.style.cssText = originalStyle;
+
+          const link = document.createElement('a');
+          link.download = `${fileName}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+      } catch (e) {
+          console.error("Download failed:", e);
+          alert("تعذر حفظ الصورة.");
+      }
+  };
+
   const missingExcuses = useMemo(() => {
       if (!attendanceHistory.length) return [];
       return attendanceHistory.filter(record => {
@@ -286,34 +321,117 @@ const Inquiry: React.FC = () => {
   
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  // --- VISITOR PASS COMPONENT ---
   const VisitorPass = ({ appt }: { appt: Appointment }) => (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden relative w-full max-w-sm mx-auto">
-          <div className="h-3 bg-gradient-to-r from-blue-600 to-indigo-600 w-full"></div>
-          <div className="p-6 text-center relative">
-              <img src={SCHOOL_LOGO} alt="Logo" className="w-16 h-16 object-contain mx-auto mb-2 opacity-90"/>
-              <h3 className="text-lg font-extrabold text-slate-900">{SCHOOL_NAME}</h3>
-              <p className="text-xs text-slate-500 uppercase tracking-widest mt-1">بطاقة دخول زائر</p>
-          </div>
-          <div className="relative flex items-center justify-center my-2"><div className="absolute left-0 w-4 h-8 bg-slate-900 rounded-r-full -ml-2"></div><div className="w-full border-t-2 border-dashed border-slate-200 mx-6"></div><div className="absolute right-0 w-4 h-8 bg-slate-900 rounded-l-full -mr-2"></div></div>
-          <div className="p-6 space-y-5">
-              <div className="flex justify-between items-center text-sm border-b border-slate-50 pb-2"><span className="text-slate-400 text-xs font-bold uppercase">الزائر</span><span className="font-bold text-slate-800 text-base">{appt.parentName}</span></div>
-              <div className="flex justify-between items-center text-sm border-b border-slate-50 pb-2"><span className="text-slate-400 text-xs font-bold uppercase">الطالب</span><span className="font-bold text-slate-800">{appt.studentName}</span></div>
-              <div className="grid grid-cols-2 gap-4"><div className="bg-slate-50 p-2 rounded-lg text-center"><p className="text-[10px] text-slate-400 font-bold uppercase">التاريخ</p><p className="font-bold text-slate-800">{appt.slot?.date}</p></div><div className="bg-blue-50 p-2 rounded-lg text-center"><p className="text-[10px] text-blue-400 font-bold uppercase">الوقت</p><p className="font-bold text-blue-800 text-lg">{appt.slot?.startTime}</p></div></div>
-          </div>
-          <div className="bg-slate-900 p-6 flex flex-col items-center justify-center text-white relative">
-              {appt.status === 'completed' ? (
-                  <div className="text-center py-6">
-                      <div className="bg-emerald-500 rounded-full p-4 mx-auto mb-4 w-20 h-20 flex items-center justify-center animate-bounce-slow"><CheckCircle size={40} className="text-white"/></div>
-                      <h3 className="text-2xl font-bold mb-2">تم تسجيل الدخول</h3>
-                      <p className="text-emerald-300 font-mono text-lg">{new Date(appt.arrivedAt || '').toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</p>
+      <div className="flex flex-col gap-3">
+          <div id={`visitor-card-${appt.id}`} className="bg-white rounded-3xl border-2 border-blue-500 shadow-2xl overflow-hidden relative w-full max-w-sm mx-auto">
+              {/* Card Header */}
+              <div className="bg-blue-600 p-4 text-center text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -mr-8 -mt-8"></div>
+                  <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full -ml-8 -mb-8"></div>
+                  
+                  <div className="flex items-center justify-center gap-3 mb-1">
+                      <img src={SCHOOL_LOGO} alt="Logo" className="w-10 h-10 object-contain bg-white rounded-full p-1 shadow-sm"/>
+                      <h3 className="font-extrabold text-lg">{SCHOOL_NAME}</h3>
                   </div>
-              ) : (
-                  <>
-                    <div className="bg-white p-3 rounded-xl mb-3 shadow-lg"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${appt.id}`} alt="QR" className="w-32 h-32"/></div>
-                    <p className="text-xs mt-2 font-bold text-emerald-400 flex items-center gap-1"><ScanLine size={14}/> يرجى إبراز الرمز عند البوابة</p>
-                  </>
-              )}
+                  <div className="text-[10px] uppercase tracking-widest font-bold bg-white/20 inline-block px-3 py-0.5 rounded-full">تصريح دخول زائر</div>
+              </div>
+
+              {/* Card Body */}
+              <div className="p-6 relative bg-gradient-to-b from-white to-blue-50">
+                  <div className="flex justify-between items-start mb-4 border-b border-blue-100 pb-4">
+                      <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">الزائر</p>
+                          <p className="font-bold text-slate-800 text-lg">{appt.parentName}</p>
+                      </div>
+                      <div className="text-left">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">نوع الزيارة</p>
+                          <p className="font-bold text-blue-600 text-sm">{appt.visitReason}</p>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                      <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm text-center">
+                          <p className="text-[10px] text-slate-400 font-bold">التاريخ</p>
+                          <p className="font-bold text-slate-800 text-sm">{appt.slot?.date}</p>
+                      </div>
+                      <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm text-center">
+                          <p className="text-[10px] text-slate-400 font-bold">الوقت</p>
+                          <p className="font-bold text-blue-600 text-lg font-mono">{appt.slot?.startTime}</p>
+                      </div>
+                  </div>
+
+                  <div className="text-center">
+                        <div className="bg-white p-2 rounded-xl inline-block shadow-md border border-slate-100 mb-2">
+                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${appt.id}`} alt="QR" className="w-28 h-28 mix-blend-multiply"/>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold">يرجى إبراز الرمز عند البوابة</p>
+                  </div>
+              </div>
+
+              {/* Card Footer */}
+              <div className="bg-slate-900 text-white p-3 text-center text-[10px] flex justify-between px-6">
+                  <span>{appt.studentName}</span>
+                  <span className="font-mono opacity-70">#{appt.id.slice(-6).toUpperCase()}</span>
+              </div>
           </div>
+          
+          <button onClick={() => downloadCard(`visitor-card-${appt.id}`, `visitor-${appt.id}`)} className="bg-blue-600 text-white py-3 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all mx-auto w-full max-w-sm">
+              <Download size={18}/> حفظ البطاقة كصورة
+          </button>
+      </div>
+  );
+
+  // --- EXIT PERMISSION CARD COMPONENT ---
+  const ExitCard = ({ perm }: { perm: ExitPermission }) => (
+      <div className="flex flex-col gap-3">
+          <div id={`exit-card-${perm.id}`} className="bg-white rounded-3xl border-2 border-orange-500 shadow-2xl overflow-hidden relative w-full max-w-sm mx-auto">
+              <div className="bg-orange-500 p-4 text-center text-white relative">
+                  <div className="flex items-center justify-center gap-3 mb-1">
+                      <img src={SCHOOL_LOGO} alt="Logo" className="w-10 h-10 object-contain bg-white rounded-full p-1 shadow-sm"/>
+                      <h3 className="font-extrabold text-lg">{SCHOOL_NAME}</h3>
+                  </div>
+                  <p className="text-xs font-bold bg-white/20 inline-block px-3 py-0.5 rounded-full">إذن خروج طالب (استئذان)</p>
+              </div>
+
+              <div className="p-6 bg-gradient-to-b from-white to-orange-50 relative">
+                  {/* Dashed line effect */}
+                  <div className="absolute left-0 right-0 top-0 h-4 -mt-2">
+                        <div className="w-4 h-4 bg-slate-800 rounded-full absolute left-[-8px]"></div>
+                        <div className="w-full border-t-2 border-dashed border-orange-300 mt-2"></div>
+                        <div className="w-4 h-4 bg-slate-800 rounded-full absolute right-[-8px] top-0"></div>
+                  </div>
+
+                  <div className="text-center mb-4 mt-2">
+                      <h2 className="text-2xl font-black text-slate-800">{perm.studentName}</h2>
+                      <p className="text-slate-500 font-bold text-sm">{perm.grade} - {perm.className}</p>
+                  </div>
+
+                  <div className="bg-white border border-orange-100 rounded-xl p-3 mb-4 text-center">
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">المستلم (ولي الأمر)</p>
+                      <p className="font-bold text-orange-700">{perm.parentName}</p>
+                  </div>
+
+                  <div className="flex justify-center mb-4">
+                      <div className="bg-white p-2 rounded-xl shadow-md border border-slate-100">
+                          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=EXIT:${perm.id}`} alt="QR" className="w-24 h-24 mix-blend-multiply"/>
+                      </div>
+                  </div>
+                  
+                  <p className="text-center text-[10px] text-red-500 font-bold flex items-center justify-center gap-1">
+                      <Clock size={12}/> صالح لمدة ساعة واحدة من الإصدار
+                  </p>
+              </div>
+              
+              <div className="bg-slate-900 text-white p-3 text-center text-[10px] flex justify-between px-6">
+                  <span>تم الإصدار: {new Date(perm.createdAt).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}</span>
+                  <span className="font-mono">#{perm.id.slice(-6).toUpperCase()}</span>
+              </div>
+          </div>
+
+          <button onClick={() => downloadCard(`exit-card-${perm.id}`, `exit-${perm.id}`)} className="bg-orange-600 text-white py-3 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-orange-700 transition-all mx-auto w-full max-w-sm">
+              <Download size={18}/> حفظ التذكرة
+          </button>
       </div>
   );
 
@@ -442,8 +560,8 @@ const Inquiry: React.FC = () => {
                             <h2 className="text-xl font-bold text-slate-900">{selectedStudent.name}</h2>
                             <p className="text-sm text-slate-500">{selectedStudent.grade} - {selectedStudent.className}</p>
                             <div className="flex justify-center gap-3 mt-5">
-                                <button onClick={() => setShowDigitalId(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"><CreditCard size={14}/> الهوية الرقمية</button>
-                                <button onClick={() => navigate(`/submit?studentId=${selectedStudent.studentId}`)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"><FileText size={14}/> تقديم عذر</button>
+                                <button onClick={() => setShowDigitalId(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-slate-800 transition-colors"><CreditCard size={14}/> الهوية الرقمية</button>
+                                <button onClick={() => navigate(`/submit?studentId=${selectedStudent.studentId}`)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-colors"><FileText size={14}/> تقديم عذر</button>
                             </div>
                         </div>
                     </div>
@@ -471,266 +589,207 @@ const Inquiry: React.FC = () => {
                             <>
                                 {activeTab === 'overview' && (
                                     <div className="space-y-6 animate-fade-in">
-                                        {/* Comprehensive Dashboard (8 Key Metrics) */}
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                            {/* 1. Days Present */}
                                             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center hover:shadow-md transition-shadow">
                                                 <div className="bg-white text-emerald-600 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm"><Check size={20}/></div>
                                                 <h3 className="text-2xl font-bold text-emerald-700">{summaryStats.present}</h3>
                                                 <p className="text-xs text-slate-500 font-bold uppercase">أيام الحضور</p>
                                             </div>
-                                            
-                                            {/* 2. Unexcused Absence (Red) */}
                                             <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-center hover:shadow-md transition-shadow">
                                                 <div className="bg-white text-red-600 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm"><AlertTriangle size={20}/></div>
                                                 <h3 className="text-2xl font-bold text-red-700">{summaryStats.unexcused}</h3>
                                                 <p className="text-xs text-slate-500 font-bold uppercase">غياب (بدون عذر)</p>
                                             </div>
-
-                                            {/* 3. Excused Absence (Blue) */}
                                             <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-center hover:shadow-md transition-shadow">
                                                 <div className="bg-white text-blue-600 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm"><FileText size={20}/></div>
                                                 <h3 className="text-2xl font-bold text-blue-700">{summaryStats.excused}</h3>
                                                 <p className="text-xs text-slate-500 font-bold uppercase">غياب (بعذر)</p>
                                             </div>
-
-                                            {/* 4. Lateness (Amber) */}
-                                            <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl text-center hover:shadow-md transition-shadow">
-                                                <div className="bg-white text-amber-600 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm"><Clock size={20}/></div>
-                                                <h3 className="text-2xl font-bold text-amber-700">{summaryStats.late}</h3>
-                                                <p className="text-xs text-slate-500 font-bold uppercase">مرات التأخير</p>
+                                            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-center hover:shadow-md transition-shadow">
+                                                <div className="bg-white text-orange-600 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm"><LogOut size={20}/></div>
+                                                <h3 className="text-2xl font-bold text-orange-700">{summaryStats.exits}</h3>
+                                                <p className="text-xs text-slate-500 font-bold uppercase">الاستئذان</p>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {/* 5. Exit Permissions (Purple/Orange) */}
-                                            <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
-                                                <div className="bg-purple-50 text-purple-600 p-3 rounded-full"><ExitIcon size={24}/></div>
-                                                <div>
-                                                    <h3 className="text-2xl font-bold text-slate-800">{summaryStats.exits}</h3>
-                                                    <p className="text-xs text-slate-400 font-bold">مرات الاستئذان</p>
-                                                </div>
-                                            </div>
-
-                                            {/* Points (Gold) */}
-                                            <div className="bg-gradient-to-br from-yellow-400 to-amber-500 p-4 rounded-2xl text-white shadow-lg flex items-center gap-3">
-                                                <div className="bg-white/20 p-3 rounded-full"><Trophy size={24}/></div>
-                                                <div>
-                                                    <h3 className="text-2xl font-bold">{points.total}</h3>
-                                                    <p className="text-xs text-white/80 font-bold">نقاط التميز</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Latest Updates Feed (6, 7, 8) */}
-                                        <h3 className="font-bold text-slate-800 text-lg mt-6 mb-4 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> آخر المستجدات</h3>
-                                        <div className="grid md:grid-cols-3 gap-4">
-                                            
-                                            {/* 8. Last Positive Behavior */}
-                                            <div className="bg-white border-l-4 border-emerald-500 p-4 rounded-xl shadow-sm">
-                                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><Star size={14} className="text-emerald-500" fill="currentColor"/> آخر سلوك إيجابي</h4>
-                                                {positiveObservations.length > 0 ? (
-                                                    <div>
-                                                        <p className="font-bold text-slate-800 text-sm line-clamp-2">{positiveObservations[0].content.replace('تعزيز سلوكي: ', '').split('(')[0]}</p>
-                                                        <span className="text-[10px] text-slate-400 mt-1 block">{positiveObservations[0].date}</span>
-                                                    </div>
-                                                ) : <p className="text-xs text-slate-400 italic">لا يوجد سجلات.</p>}
-                                            </div>
-
-                                            {/* 6. Last Violation */}
-                                            <div className="bg-white border-l-4 border-red-500 p-4 rounded-xl shadow-sm">
-                                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><ShieldAlert size={14} className="text-red-500"/> آخر مخالفة سلوكية</h4>
-                                                {behaviorHistory.length > 0 ? (
-                                                    <div>
-                                                        <p className="font-bold text-slate-800 text-sm line-clamp-1">{behaviorHistory[0].violationName}</p>
-                                                        <span className="text-[10px] text-slate-400 mt-1 block">{behaviorHistory[0].date} - {behaviorHistory[0].violationDegree}</span>
-                                                    </div>
-                                                ) : <p className="text-xs text-slate-400 italic">سجل نظيف.</p>}
-                                            </div>
-
-                                            {/* 7. Last Observation */}
-                                            <div className="bg-white border-l-4 border-blue-500 p-4 rounded-xl shadow-sm">
-                                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><MessageSquare size={14} className="text-blue-500"/> آخر ملاحظة مسجلة</h4>
-                                                {observations.length > 0 ? (
-                                                    <div>
-                                                        <p className="font-bold text-slate-800 text-sm line-clamp-2">{observations[0].content}</p>
-                                                        <span className="text-[10px] text-slate-400 mt-1 block">{observations[0].date} - {observations[0].staffName}</span>
-                                                    </div>
-                                                ) : <p className="text-xs text-slate-400 italic">لا يوجد ملاحظات.</p>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeTab === 'absence_reg' && (
-                                    <div className="space-y-6 animate-fade-in">
-                                        <div className="bg-blue-50 border border-blue-100 p-6 rounded-3xl text-center">
-                                            <FileText size={48} className="mx-auto text-blue-500 mb-4"/>
-                                            <h3 className="text-lg font-bold text-blue-900 mb-2">تقديم عذر غياب</h3>
-                                            <p className="text-sm text-blue-700 mb-6">يمكنك تقديم عذر لغياب اليوم أو أيام سابقة بسهولة.</p>
-                                            <button 
-                                                onClick={() => navigate(`/submit?studentId=${selectedStudent.studentId}&date=${new Date().toISOString().split('T')[0]}`)} 
-                                                className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2 mx-auto"
-                                            >
-                                                <Plus size={18}/> تقديم عذر لغياب اليوم
-                                            </button>
-                                        </div>
                                         {missingExcuses.length > 0 && (
-                                            <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
-                                                <h3 className="text-red-800 font-bold flex items-center gap-2 mb-3"><AlertTriangle size={18}/> أيام غياب بدون عذر</h3>
+                                            <div className="bg-red-50 border border-red-100 rounded-2xl p-5 animate-fade-in-up">
+                                                <h3 className="text-red-800 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18}/> تنبيه: أيام غياب تحتاج لتبرير</h3>
                                                 <div className="space-y-2">
-                                                    {missingExcuses.map((record, idx) => (
-                                                        <div key={idx} className="bg-white p-3 rounded-xl border border-red-100 flex justify-between items-center">
-                                                            <span className="font-bold text-slate-800 text-sm">{record.date}</span>
-                                                            <button 
-                                                                onClick={() => navigate(`/submit?studentId=${selectedStudent.studentId}&date=${record.date}`)}
-                                                                className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-red-700"
-                                                            >
-                                                                تقديم عذر
-                                                            </button>
+                                                    {missingExcuses.map((exc, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100">
+                                                            <span className="text-sm font-bold text-slate-700">{exc.date}</span>
+                                                            <button onClick={() => navigate(`/submit?studentId=${selectedStudent.studentId}&date=${exc.date}`)} className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-red-700">تقديم عذر</button>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
                                         )}
-                                        <div className="bg-white p-4 rounded-2xl border border-slate-200">
-                                            <h4 className="font-bold text-sm mb-3">سجل الطلبات السابقة</h4>
-                                            {history.length === 0 ? <p className="text-center text-slate-400 text-xs py-4">لا توجد طلبات سابقة.</p> : (
-                                                <div className="space-y-2">
-                                                    {history.map(req => (
-                                                        <div key={req.id} className="flex justify-between items-center p-3 border-b border-slate-50 last:border-0 text-sm">
-                                                            <div><p className="font-bold text-slate-800">{req.date}</p><p className="text-xs text-slate-500">{req.reason}</p></div>
-                                                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${req.status==='APPROVED'?'bg-emerald-100 text-emerald-700':req.status==='REJECTED'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{req.status==='APPROVED'?'مقبول':req.status==='REJECTED'?'مرفوض':'قيد المراجعة'}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'absence_reg' && (
+                                    <div className="space-y-4 animate-fade-in">
+                                        <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center">
+                                            <FilePlus size={48} className="mx-auto text-blue-500 mb-4" />
+                                            <h3 className="text-lg font-bold text-slate-800 mb-2">تقديم عذر جديد</h3>
+                                            <p className="text-sm text-slate-500 mb-6">يمكنك رفع الأعذار الطبية أو العائلية من هنا.</p>
+                                            <button 
+                                                onClick={() => navigate(`/submit?studentId=${selectedStudent.studentId}`)}
+                                                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors w-full md:w-auto"
+                                            >
+                                                ابدأ طلب جديد
+                                            </button>
                                         </div>
+                                        
+                                        <h3 className="font-bold text-slate-800 mt-6 mb-3">سجل الطلبات السابقة</h3>
+                                        {history.length === 0 ? <p className="text-center py-8 text-slate-400 bg-slate-50 rounded-xl">لا يوجد طلبات سابقة.</p> : history.map(req => (
+                                            <div key={req.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="flex justify-between mb-2">
+                                                    <span className={`text-[10px] px-2 py-1 rounded font-bold ${req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : req.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{req.status === 'APPROVED' ? 'مقبول' : req.status === 'REJECTED' ? 'مرفوض' : 'قيد المراجعة'}</span>
+                                                    <span className="text-xs text-slate-400">{req.date}</span>
+                                                </div>
+                                                <p className="font-bold text-sm text-slate-800">{req.reason}</p>
+                                                <p className="text-xs text-slate-500 mt-1">{req.details}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {activeTab === 'calendar' && (
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 animate-fade-in">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <button onClick={() => setCalendarMonth(new Date(calendarMonth.setMonth(calendarMonth.getMonth() - 1)))} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft/></button>
+                                            <h3 className="font-bold text-lg">{calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+                                            <button onClick={() => setCalendarMonth(new Date(calendarMonth.setMonth(calendarMonth.getMonth() + 1)))} className="p-2 hover:bg-slate-100 rounded-full"><ChevronRight/></button>
+                                        </div>
+                                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2"><div>أحد</div><div>إثنين</div><div>ثلاثاء</div><div>أربعاء</div><div>خميس</div><div>جمعة</div><div>سبت</div></div>
+                                        <div className="grid grid-cols-7 gap-2">
+                                            {getDaysInMonth(calendarMonth).map((date, i) => {
+                                                if (!date) return <div key={`empty-${i}`}></div>;
+                                                const dateStr = date.toISOString().split('T')[0];
+                                                const record = attendanceHistory.find(r => r.date === dateStr);
+                                                let bgClass = 'bg-slate-50 text-slate-700';
+                                                if (record?.status === 'ABSENT') bgClass = 'bg-red-500 text-white';
+                                                else if (record?.status === 'LATE') bgClass = 'bg-amber-500 text-white';
+                                                else if (record?.status === 'PRESENT') bgClass = 'bg-emerald-500 text-white';
+                                                return <div key={i} className={`h-10 rounded-lg flex items-center justify-center text-sm font-bold ${bgClass}`}>{date.getDate()}</div>
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'behavior' && (
+                                    <div className="space-y-4 animate-fade-in">
+                                        {behaviorHistory.length === 0 ? <p className="text-center py-10 text-slate-400">سجل نظيف! لا توجد مخالفات.</p> : behaviorHistory.map(b => (
+                                            <div key={b.id} className="bg-white p-4 rounded-2xl border border-red-50 shadow-sm">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="font-bold text-red-700 text-sm">{b.violationName}</span>
+                                                    <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500">{b.date}</span>
+                                                </div>
+                                                <p className="text-xs text-slate-600 mb-2">الإجراء: {b.actionTaken}</p>
+                                                {!b.parentViewed ? (
+                                                    <div className="mt-3 pt-3 border-t border-slate-50">
+                                                        <textarea placeholder="اكتب ردك هنا..." value={replyMode?.id === b.id ? replyContent : ''} onChange={e => { setReplyMode({ id: b.id, type: 'behavior' }); setReplyContent(e.target.value); }} className="w-full p-2 bg-slate-50 rounded-lg text-xs outline-none border border-slate-200 focus:border-blue-300 mb-2"></textarea>
+                                                        <button onClick={handleSubmitReply} disabled={submittingReply} className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-bold">{submittingReply ? <Loader2 size={12} className="animate-spin mx-auto"/> : 'إرسال الرد وتأكيد الاطلاع'}</button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="mt-2 bg-green-50 p-2 rounded text-[10px] text-green-700 flex items-center gap-1"><Check size={12}/> تم الاطلاع والرد</div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {activeTab === 'positive_behavior' && (
+                                    <div className="space-y-4 animate-fade-in">
+                                        {positiveObservations.length === 0 ? <p className="text-center py-10 text-slate-400">لا يوجد سجلات حالياً.</p> : positiveObservations.map(obs => (
+                                            <div key={obs.id} className="bg-white p-5 rounded-2xl border-l-4 border-emerald-500 shadow-sm">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h3 className="font-bold text-emerald-800 text-sm flex items-center gap-2"><Medal size={16}/> تميز سلوكي</h3>
+                                                    <span className="text-[10px] text-slate-400">{obs.date}</span>
+                                                </div>
+                                                <p className="text-sm text-slate-700 mb-3">{obs.content.replace('تعزيز سلوكي: ', '').split('(')[0]}</p>
+                                                <button onClick={() => handlePrintCertificate(obs)} className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 w-fit"><Printer size={12}/> طباعة شهادة شكر</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {activeTab === 'observations' && (
+                                    <div className="space-y-4 animate-fade-in">
+                                        {observations.length === 0 ? <p className="text-center py-10 text-slate-400">لا توجد ملاحظات.</p> : observations.map(obs => (
+                                            <div key={obs.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="flex justify-between mb-2">
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${obs.type === 'academic' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>{obs.type === 'academic' ? 'أكاديمي' : 'عام'}</span>
+                                                    <span className="text-[10px] text-slate-400">{obs.date}</span>
+                                                </div>
+                                                <p className="text-sm text-slate-700 mb-3">{obs.content}</p>
+                                                {!obs.parentViewed && (
+                                                    <div className="mt-2">
+                                                        <textarea placeholder="رد ولي الأمر..." value={replyMode?.id === obs.id ? replyContent : ''} onChange={e => { setReplyMode({ id: obs.id, type: 'observation' }); setReplyContent(e.target.value); }} className="w-full p-2 bg-slate-50 rounded-lg text-xs outline-none border mb-2"></textarea>
+                                                        <button onClick={handleSubmitReply} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold w-full">إرسال الرد</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {activeTab === 'report' && (
+                                    <div className="text-center py-8 animate-fade-in">
+                                        <Sparkles className="mx-auto text-purple-500 mb-4" size={48} />
+                                        <h3 className="font-bold text-slate-800 text-lg mb-2">التقرير الذكي الشامل</h3>
+                                        <p className="text-slate-500 text-sm mb-6 max-w-xs mx-auto">احصل على تحليل مفصل لأداء الطالب وسلوكه باستخدام الذكاء الاصطناعي.</p>
+                                        <button onClick={handleGenerateSmartReport} disabled={generatingReport} className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-purple-200 hover:shadow-xl transition-all flex items-center justify-center gap-2 w-full md:w-auto mx-auto">
+                                            {generatingReport ? <Loader2 className="animate-spin" /> : <Wand2 size={20} />} توليد التقرير
+                                        </button>
+                                        {smartReport && (
+                                            <div className="mt-8 bg-white p-6 rounded-2xl border border-purple-100 text-right shadow-sm text-sm leading-relaxed whitespace-pre-line animate-fade-in-up">
+                                                {smartReport}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {activeTab === 'exits' && (
                                     <div className="space-y-4 animate-fade-in">
+                                        {/* Updated Exit Card Section */}
                                         <div className="bg-orange-50 border border-orange-100 p-5 rounded-2xl relative overflow-hidden text-center">
-                                            <h3 className="text-lg font-bold text-orange-900 mb-2">بطاقة الخروج</h3>
+                                            <h3 className="text-lg font-bold text-orange-900 mb-4">بطاقة الخروج الرقمية</h3>
                                             {(() => {
                                                 const activeExit = exitPermissions.find(p => {
                                                     if (p.status !== 'pending_pickup') return false;
                                                     const createdTime = new Date(p.createdAt).getTime();
                                                     const now = new Date().getTime();
                                                     const diffHours = (now - createdTime) / (1000 * 60 * 60);
-                                                    return diffHours < 1;
+                                                    return diffHours < 1; // Valid for 1 hour
                                                 });
                                                 if (activeExit) {
                                                     return (
-                                                        <div className="bg-white p-4 rounded-xl shadow-lg border border-orange-100 inline-block animate-fade-in-up">
-                                                            <div className="mb-2"><img src={SCHOOL_LOGO} className="w-8 h-8 mx-auto object-contain opacity-50"/></div>
-                                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=EXIT:${activeExit.id}`} alt="Exit QR" className="w-40 h-40 mx-auto mix-blend-multiply mb-2"/>
-                                                            <p className="text-sm font-bold text-slate-800">تصريح خروج طالب</p>
-                                                            <p className="text-[10px] text-slate-500 mt-1">يرجى إبراز الرمز عند البوابة</p>
-                                                            <p className="text-[10px] text-orange-400 mt-1">صالحة لمدة ساعة</p>
+                                                        <div className="animate-fade-in-up flex flex-col items-center gap-4">
+                                                            <ExitCard perm={activeExit} />
                                                         </div>
                                                     );
                                                 }
-                                                return <p className="text-sm text-orange-800 opacity-70 py-4">لا يوجد إذن خروج نشط حالياً.</p>;
+                                                return <div className="py-8 text-orange-800/60 font-bold">لا يوجد إذن خروج نشط حالياً.</div>;
                                             })()}
                                         </div>
-                                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                            <h3 className="font-bold text-slate-800 mb-3 text-sm">سجل الاستئذان</h3>
-                                            <div className="space-y-3">
-                                                {exitPermissions.length === 0 ? <p className="text-center text-slate-400 text-xs">السجل فارغ.</p> : exitPermissions.map(p => (
-                                                    <div key={p.id} className="flex justify-between items-center p-3 border-b border-slate-50 last:border-0 text-sm">
-                                                        <div><p className="font-bold text-slate-800">{p.reason || 'بدون سبب'}</p><p className="text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString('ar-SA')}</p></div>
-                                                        <div className="text-left"><span className={`text-[10px] font-bold block ${p.status==='completed'?'text-emerald-600':'text-orange-600'}`}>{p.status==='completed'?'تم الخروج':'لم يخرج'}</span>{p.status === 'completed' && p.completedAt && <span className="text-[10px] text-slate-400 font-mono">{new Date(p.completedAt).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}</span>}</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeTab === 'positive_behavior' && (
-                                    <div className="space-y-6 animate-fade-in">
-                                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-3xl text-white shadow-lg text-center relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
-                                            <div className="relative z-10">
-                                                <Trophy size={48} className="mx-auto mb-2 text-yellow-300 drop-shadow-md"/>
-                                                <h2 className="text-4xl font-extrabold">{points.total}</h2>
-                                                <p className="text-emerald-100 text-sm font-bold tracking-widest uppercase">إجمالي نقاط التميز</p>
-                                            </div>
-                                        </div>
-                                        <h3 className="font-bold text-slate-800 text-sm px-2">سجل التكريم والملاحظات الإيجابية</h3>
-                                        {positiveObservations.length === 0 ? <p className="text-center text-slate-400 text-sm py-10 border-2 border-dashed border-slate-200 rounded-2xl">لا يوجد سجلات حتى الآن.</p> : (
-                                            <div className="grid gap-3">
-                                                {positiveObservations.map(obs => (
-                                                    <div key={obs.id} className="bg-white p-4 rounded-2xl border-l-4 border-emerald-500 shadow-sm flex flex-col gap-3">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="bg-emerald-50 p-2 rounded-xl text-emerald-600"><Medal size={24}/></div>
-                                                                <div><p className="font-bold text-slate-800 text-sm">{obs.content.replace('تعزيز سلوكي: ', '').split('(')[0]}</p><p className="text-[10px] text-slate-400 mt-0.5">{obs.date} • {obs.staffName}</p></div>
-                                                            </div>
+                                        
+                                        <h3 className="font-bold text-slate-800 mt-6 mb-2">سجل الاستئذان</h3>
+                                        {exitPermissions.length === 0 ? <p className="text-center py-4 text-slate-400">لا يوجد سجلات سابقة.</p> : 
+                                            <div className="space-y-2">
+                                                {exitPermissions.map(p => (
+                                                    <div key={p.id} className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center text-sm">
+                                                        <div>
+                                                            <span className="font-bold block">{p.reason}</span>
+                                                            <span className="text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString('ar-SA')}</span>
                                                         </div>
-                                                        <button onClick={() => handlePrintCertificate(obs)} className="text-xs bg-slate-800 text-white w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-slate-900 transition-colors"><Printer size={14}/> عرض وطباعة الشهادة</button>
+                                                        <span className={`text-xs px-2 py-1 rounded ${p.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>{p.status === 'completed' ? 'تم الخروج' : 'منتهي'}</span>
                                                     </div>
                                                 ))}
                                             </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {activeTab === 'calendar' && (
-                                    <div className="animate-fade-in">
-                                        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm mb-4">
-                                            <div className="flex justify-between items-center mb-6">
-                                                <button onClick={() => setCalendarMonth(new Date(calendarMonth.setMonth(calendarMonth.getMonth() - 1)))} className="p-2 bg-slate-50 rounded-full"><ChevronRight size={16}/></button>
-                                                <h3 className="font-bold text-slate-800 text-lg">{calendarMonth.toLocaleDateString('ar-SA', { month: 'long', year: 'numeric' })}</h3>
-                                                <button onClick={() => setCalendarMonth(new Date(calendarMonth.setMonth(calendarMonth.getMonth() + 1)))} className="p-2 bg-slate-50 rounded-full"><ChevronLeft size={16}/></button>
-                                            </div>
-                                            <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-400 mb-2"><div>أ</div><div>إ</div><div>ث</div><div>أ</div><div>خ</div><div>ج</div><div>س</div></div>
-                                            <div className="grid grid-cols-7 gap-2">
-                                                {getDaysInMonth(calendarMonth).map((date, i) => {
-                                                    if (!date) return <div key={i}></div>;
-                                                    const dateStr = date.toISOString().split('T')[0];
-                                                    const attRecord = attendanceHistory.find(r => r.date === dateStr);
-                                                    const hasExcuse = history.find(req => req.date === dateStr && req.status !== RequestStatus.REJECTED);
-                                                    const hasExit = exitPermissions.find(e => e.createdAt.startsWith(dateStr));
-                                                    let bgClass = 'bg-slate-50 text-slate-300';
-                                                    if (attRecord?.status === AttendanceStatus.ABSENT) bgClass = hasExcuse ? 'bg-blue-500 text-white' : 'bg-red-500 text-white';
-                                                    else if (attRecord?.status === AttendanceStatus.LATE) bgClass = 'bg-amber-400 text-white';
-                                                    else if (attRecord?.status === AttendanceStatus.PRESENT) bgClass = 'bg-emerald-500 text-white';
-                                                    let borderClass = hasExit ? 'ring-2 ring-purple-500' : '';
-                                                    return <div key={i} className={`h-12 rounded-xl flex flex-col items-center justify-center text-xs font-bold ${bgClass} ${borderClass}`}><span>{date.getDate()}</span></div>;
-                                                })}
-                                            </div>
-                                            <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap gap-4 justify-center text-[10px] font-bold text-slate-600">
-                                                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> حضور</div>
-                                                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> غياب (بدون عذر)</div>
-                                                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> غياب (بعذر)</div>
-                                                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-400"></span> تأخر</div>
-                                                <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full border-2 border-purple-500"></span> استئذان</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeTab === 'report' && (
-                                    <div className="space-y-4 animate-fade-in">
-                                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
-                                            <div className="relative z-10"><h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Sparkles size={20}/> التقرير التربوي الذكي</h3><p className="text-blue-100 text-sm mb-4">تحليل شامل لأداء الطالب.</p>{!smartReport ? <button onClick={handleGenerateSmartReport} disabled={generatingReport} className="bg-white text-blue-700 px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-50 transition-all flex items-center gap-2">{generatingReport ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>} توليد التقرير الآن</button> : <button onClick={() => setSmartReport(null)} className="bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-white/30">إعادة التوليد</button>}</div>
-                                        </div>
-                                        {smartReport && <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm leading-relaxed text-slate-700 text-sm whitespace-pre-line animate-fade-in">{smartReport}</div>}
-                                    </div>
-                                )}
-
-                                {(activeTab === 'behavior' || activeTab === 'observations') && (
-                                    <div className="space-y-4 animate-fade-in">
-                                        {(activeTab === 'behavior' ? behaviorHistory : observations).length === 0 ? <p className="text-center py-10 text-slate-400 text-sm">سجل نظيف.</p> : (activeTab === 'behavior' ? behaviorHistory : observations).map((rec: any) => (
-                                            <div key={rec.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                                <div className="flex justify-between items-start mb-2"><h4 className="font-bold text-slate-800 text-sm">{activeTab === 'behavior' ? rec.violationName : rec.staffName}</h4><span className="text-xs text-slate-400">{rec.date}</span></div>
-                                                <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-xl mb-3 leading-relaxed">{activeTab === 'behavior' ? rec.actionTaken : rec.content}</p>
-                                                {!rec.parentViewed ? (replyMode?.id === rec.id ? <div className="animate-fade-in"><textarea className="w-full p-3 border rounded-xl text-sm mb-2 outline-none" placeholder="اكتب ردك..." value={replyContent} onChange={e => setReplyContent(e.target.value)} autoFocus></textarea><div className="flex gap-2"><button onClick={() => { setReplyMode(null); setReplyContent(''); }} className="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-bold">إلغاء</button><button onClick={handleSubmitReply} disabled={submittingReply} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-bold">{submittingReply ? <Loader2 className="animate-spin mx-auto" size={14}/> : 'إرسال'}</button></div></div> : <button onClick={() => { setReplyMode({id: rec.id, type: activeTab === 'behavior' ? 'behavior' : 'observation'}); setReplyContent(''); }} className="w-full bg-blue-50 text-blue-600 py-2 rounded-lg text-xs font-bold border border-blue-100 hover:bg-blue-100">تأكيد الاطلاع والرد</button>) : <div className="bg-emerald-50 p-2 rounded-lg text-xs text-emerald-700 font-bold flex items-center gap-2 border border-emerald-100"><CheckCircle size={14}/> تم الاطلاع {rec.parentFeedback && `- الرد: ${rec.parentFeedback}`}</div>}
-                                            </div>
-                                        ))}
+                                        }
                                     </div>
                                 )}
 
@@ -738,7 +797,7 @@ const Inquiry: React.FC = () => {
                                     <div className="space-y-6 animate-fade-in">
                                         <div className="space-y-3">
                                             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><CalendarCheck size={16} className="text-blue-600"/> المواعيد المتاحة</h3>
-                                            {availableSlots.length === 0 ? <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-sm">لا توجد مواعيد متاحة حالياً.</div> : <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{availableSlots.map(slot => (<button key={slot.id} onClick={() => handleSlotClick(slot)} className="bg-white border border-slate-200 p-4 rounded-xl text-center hover:border-blue-500 hover:shadow-md transition-all group"><p className="font-bold text-blue-900 text-lg group-hover:text-blue-600">{slot.startTime}</p><p className="text-xs text-slate-400 mt-1">{slot.date}</p><span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded mt-2 inline-block">حجز</span></button>))}</div>}
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{availableSlots.map(slot => (<button key={slot.id} onClick={() => handleSlotClick(slot)} className="bg-white border border-slate-200 p-4 rounded-xl text-center hover:border-blue-500 hover:shadow-md transition-all group"><p className="font-bold text-blue-900 text-lg group-hover:text-blue-600">{slot.startTime}</p><p className="text-xs text-slate-400 mt-1">{slot.date}</p><span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded mt-2 inline-block">حجز</span></button>))}</div>
                                         </div>
                                         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                             <div className="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-700 text-sm">سجل حجوزاتي</div>
@@ -767,10 +826,9 @@ const Inquiry: React.FC = () => {
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
                 <div className="bg-white rounded-3xl p-6 w-full max-w-sm relative">
                     {bookingSuccess ? (
-                        <div className="relative w-full">
+                        <div className="relative w-full flex flex-col items-center">
                             <button onClick={()=>{setShowBookingModal(false); setBookingSuccess(null)}} className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white/20 text-white p-2 rounded-full hover:bg-white/30"><X size={24}/></button>
                             <VisitorPass appt={bookingSuccess} />
-                            <p className="text-center text-slate-500 text-xs mt-4">تم الحفظ</p>
                         </div>
                     ) : (
                         <form onSubmit={handleConfirmBooking} className="space-y-4">
@@ -786,23 +844,49 @@ const Inquiry: React.FC = () => {
 
         {showTicketModal && selectedTicket && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-                <div className="relative w-full max-w-sm">
+                <div className="relative w-full max-w-sm flex flex-col items-center">
                     <button onClick={()=>{setShowTicketModal(false); setSelectedTicket(null)}} className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white/20 text-white p-2 rounded-full hover:bg-white/30"><X size={24}/></button>
                     <VisitorPass appt={selectedTicket} />
                 </div>
             </div>
         )}
 
-        {showDigitalId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setShowDigitalId(false)}>
-                <div className="w-full max-w-sm aspect-[1.586/1] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 rounded-3xl shadow-2xl relative overflow-hidden border border-white/10" onClick={e => e.stopPropagation()}>
-                    <div className="relative z-10 p-6 h-full flex flex-col justify-between">
-                        <div className="flex justify-between items-start"><div><p className="text-[10px] text-blue-200 font-bold tracking-widest uppercase mb-1">Student ID Card</p><h3 className="text-lg font-bold text-white leading-tight">{SCHOOL_NAME}</h3></div><img src={SCHOOL_LOGO} alt="Logo" className="w-10 h-10 object-contain bg-white/10 rounded-full p-1"/></div>
-                        <div className="flex items-end justify-between mt-auto">
-                            <div><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Name</p><p className="text-xl font-bold text-white mb-3 tracking-wide">{selectedStudent?.name}</p><div className="flex gap-4"><div><p className="text-[9px] text-slate-400 font-bold uppercase">ID</p><p className="text-sm font-mono text-blue-100">{selectedStudent?.studentId}</p></div><div><p className="text-[9px] text-slate-400 font-bold uppercase">Grade</p><p className="text-sm font-mono text-blue-100">{selectedStudent?.grade}</p></div></div></div>
-                            <div className="bg-white p-1.5 rounded-lg"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${selectedStudent?.studentId}`} className="w-16 h-16 mix-blend-multiply" alt="QR"/></div>
+        {/* DIGITAL ID MODAL */}
+        {showDigitalId && selectedStudent && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-fade-in" onClick={() => setShowDigitalId(false)}>
+                <div className="flex flex-col gap-4 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                    <div id="digital-id-card" className="w-full aspect-[1.586/1] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 rounded-3xl shadow-2xl relative overflow-hidden border border-white/10 group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl -ml-10 -mb-10"></div>
+                        <div className="relative z-10 p-6 h-full flex flex-col justify-between">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] text-blue-300 font-bold tracking-[0.2em] uppercase mb-1">Digital Student ID</p>
+                                    <h3 className="text-lg font-bold text-white leading-tight drop-shadow-md">{SCHOOL_NAME}</h3>
+                                </div>
+                                <div className="bg-white/10 p-1.5 rounded-full border border-white/10 backdrop-blur-sm">
+                                    <img src={SCHOOL_LOGO} alt="Logo" className="w-10 h-10 object-contain"/>
+                                </div>
+                            </div>
+                            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                            <div className="flex items-end justify-between mt-auto">
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Student Name</p>
+                                    <p className="text-xl font-bold text-white mb-3 tracking-wide drop-shadow-sm">{selectedStudent.name}</p>
+                                    <div className="flex gap-4">
+                                        <div><p className="text-[9px] text-slate-400 font-bold uppercase">ID Number</p><p className="text-sm font-mono text-blue-100">{selectedStudent.studentId}</p></div>
+                                        <div><p className="text-[9px] text-slate-400 font-bold uppercase">Grade</p><p className="text-sm font-mono text-blue-100">{selectedStudent.grade}</p></div>
+                                    </div>
+                                </div>
+                                <div className="bg-white p-1.5 rounded-lg shadow-lg">
+                                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${selectedStudent.studentId}`} className="w-16 h-16 mix-blend-multiply" alt="QR"/>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <button onClick={() => downloadCard('digital-id-card', `student-id-${selectedStudent.studentId}`)} className="w-full bg-blue-600 text-white py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg active:scale-95">
+                        <Download size={18}/> حفظ الهوية كصورة
+                    </button>
                 </div>
             </div>
         )}

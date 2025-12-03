@@ -24,8 +24,9 @@ import StaffObservations from './pages/staff/Observations';
 import GateScanner from './pages/staff/GateScanner'; 
 import ExitPermissions from './pages/staff/ExitPermissions'; 
 import { StaffUser } from './types';
+import { getActiveSchool, logoutUserSession } from './services/storage';
 
-const { HashRouter, Routes, Route, Navigate, useLocation } = ReactRouterDOM as any;
+const { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } = ReactRouterDOM as any;
 
 // Protected Route for Admin
 const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
@@ -64,6 +65,7 @@ const ProtectedStaffRoute = ({
 
 const AppContent = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   
   // Determine Role Logic
   const isAdminRoute = location.pathname.startsWith('/admin') && location.pathname !== '/admin/login';
@@ -74,13 +76,14 @@ const AppContent = () => {
   if (isStaffRoute) role = 'staff';
 
   const handleLogout = () => {
-    if (isAdminRoute) {
-      localStorage.removeItem('ozr_admin_session');
-    } else {
-      localStorage.removeItem('ozr_staff_session');
-    }
-    // Redirect to home page completely
-    window.location.href = '/'; 
+    // Determine target based on current school context
+    const activeSchool = getActiveSchool();
+    const redirectPath = activeSchool ? `/s/${activeSchool.schoolCode}` : '/';
+
+    logoutUserSession(); // Clears sessions but keeps school
+    
+    // Redirect
+    navigate(redirectPath);
   };
 
   return (

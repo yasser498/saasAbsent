@@ -31,10 +31,16 @@ export const setActiveSchool = (school: School) => {
     else localStorage.removeItem('school_logo');
 };
 
+// Full Logout (Change School)
 export const logoutSchool = () => {
     localStorage.removeItem('active_school');
     localStorage.removeItem('school_name');
     localStorage.removeItem('school_logo');
+    logoutUserSession(); // Clear user sessions as well
+};
+
+// User Logout (Keep School Context)
+export const logoutUserSession = () => {
     localStorage.removeItem('ozr_admin_session');
     localStorage.removeItem('ozr_staff_session');
     localStorage.removeItem('ozr_parent_id');
