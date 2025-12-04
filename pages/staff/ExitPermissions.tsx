@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LogOut, Plus, Search, Calendar, User, Phone, CheckCircle, Clock, XCircle, Printer, X } from 'lucide-react';
 import { getStudents, addExitPermission, getExitPermissions } from '../../services/storage';
 import { Student, StaffUser, ExitPermission } from '../../types';
-import { GRADES } from '../../constants';
 
 const ExitPermissions: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
@@ -49,6 +48,12 @@ const ExitPermissions: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Derive unique grades dynamically from student list
+  const uniqueGrades = useMemo(() => {
+    const grades = new Set(students.map(s => s.grade));
+    return Array.from(grades).sort();
+  }, [students]);
 
   const availableClasses = useMemo(() => {
     if (!formGrade) return [];
@@ -252,7 +257,7 @@ const ExitPermissions: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="text-xs font-bold text-slate-500 block mb-1">الصف</label>
-                                <select value={formGrade} onChange={e => { setFormGrade(e.target.value); setFormClass(''); setSelectedStudentId(''); }} className="w-full p-2 border rounded-lg bg-white"><option value="">اختر...</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}</select>
+                                <select value={formGrade} onChange={e => { setFormGrade(e.target.value); setFormClass(''); setSelectedStudentId(''); }} className="w-full p-2 border rounded-lg bg-white"><option value="">اختر...</option>{uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}</select>
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-500 block mb-1">الفصل</label>

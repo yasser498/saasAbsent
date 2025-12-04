@@ -1,24 +1,29 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
-import { Calendar, CheckCircle, Clock, XCircle, Save, Check, School, Users, ListChecks, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, XCircle, Save, Check, ListChecks, ChevronDown, Loader2, AlertTriangle, Filter } from 'lucide-react';
 import { getStudents, saveAttendanceRecord, getAttendanceRecordForClass } from '../../services/storage';
-import { Student, StaffUser, AttendanceStatus, AttendanceRecord, ClassAssignment } from '../../types';
+import { Student, StaffUser, AttendanceStatus, AttendanceRecord } from '../../types';
 
 const { useNavigate } = ReactRouterDOM as any;
 
 const Attendance: React.FC = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
-  const [currentAssignment, setCurrentAssignment] = useState<ClassAssignment | null>(null);
   
-  const [students, setStudents] = useState<Student[]>([]);
+  // Data State
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({});
   
-  const [saved, setSaved] = useState(false);
-  const [loadingStudents, setLoadingStudents] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // Filter State
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // UI State
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const session = localStorage.getItem('ozr_staff_session');
@@ -28,44 +33,83 @@ const Attendance: React.FC = () => {
     }
     const user = JSON.parse(session) as StaffUser;
     setCurrentUser(user);
-    if (user.assignments && user.assignments.length > 0) {
-      setCurrentAssignment(user.assignments[0]);
-    }
+    
+    // Initial fetch
+    const init = async () => {
+        setLoading(true);
+        try {
+            const studentsData = await getStudents() as Student[];
+            setAllStudents(studentsData);
+            
+            // Try to auto-select from assignment if matches DB
+            if (user.assignments && user.assignments.length > 0) {
+                const first = user.assignments[0];
+                // Check if this assignment actually exists in DB to avoid empty screens
+                const exists = studentsData.some(s => s.grade === first.grade && s.className === first.className);
+                if (exists) {
+                    setSelectedGrade(first.grade);
+                    setSelectedClass(first.className);
+                } else {
+                    // If strict assignment doesn't match, maybe just grade matches?
+                    // Or default to first available in DB
+                    const grades = Array.from(new Set(studentsData.map(s => s.grade))).sort();
+                    if (grades.length > 0) setSelectedGrade(grades[0]);
+                }
+            } else if (studentsData.length > 0) {
+                 const grades = Array.from(new Set(studentsData.map(s => s.grade))).sort();
+                 setSelectedGrade(grades[0]);
+            }
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+    init();
   }, [navigate]);
 
-  useEffect(() => {
-    if (!currentUser || !currentAssignment) return;
-    const fetchStudentsAndAttendance = async () => {
-      setLoadingStudents(true);
-      try {
-        const allStudents = await getStudents();
-        const classStudents = allStudents.filter(s => 
-          s.grade === currentAssignment.grade && s.className === currentAssignment.className
-        );
-        setStudents(classStudents);
+  // Derived Lists
+  const uniqueGrades = useMemo(() => {
+    const grades = new Set(allStudents.map(s => s.grade));
+    return Array.from(grades).sort();
+  }, [allStudents]);
 
-        const existingRecord = await getAttendanceRecordForClass(selectedDate, currentAssignment.grade, currentAssignment.className);
-        const initialMap: Record<string, AttendanceStatus> = {};
-        
-        if (existingRecord) {
-           classStudents.forEach(s => {
-              const record = existingRecord.records.find(r => r.studentId === s.studentId);
-              initialMap[s.id] = record ? record.status : AttendanceStatus.PRESENT;
-           });
-           setSaved(true);
-        } else {
-           classStudents.forEach(s => initialMap[s.id] = AttendanceStatus.PRESENT);
-           setSaved(false);
-        }
-        setAttendanceMap(initialMap);
-      } catch (error) {
-        console.error("Failed to load students", error);
-      } finally {
-        setLoadingStudents(false);
-      }
+  const availableClasses = useMemo(() => {
+    if (!selectedGrade) return [];
+    const classes = new Set(allStudents.filter(s => s.grade === selectedGrade).map(s => s.className));
+    return Array.from(classes).sort();
+  }, [allStudents, selectedGrade]);
+
+  const currentStudents = useMemo(() => {
+      return allStudents.filter(s => s.grade === selectedGrade && s.className === selectedClass);
+  }, [allStudents, selectedGrade, selectedClass]);
+
+  // Fetch Attendance Record when selection changes
+  useEffect(() => {
+    if (!selectedGrade || !selectedClass) return;
+    
+    const fetchRecord = async () => {
+        // Don't set global loading to avoid flickering whole page, maybe just list?
+        // Using a local var or just rely on react fast render.
+        try {
+            const existingRecord = await getAttendanceRecordForClass(selectedDate, selectedGrade, selectedClass);
+            const initialMap: Record<string, AttendanceStatus> = {};
+            
+            if (existingRecord) {
+                currentStudents.forEach(s => {
+                    const record = existingRecord.records.find(r => r.studentId === s.studentId);
+                    initialMap[s.id] = record ? record.status : AttendanceStatus.PRESENT;
+                });
+                setSaved(true);
+            } else {
+                currentStudents.forEach(s => initialMap[s.id] = AttendanceStatus.PRESENT);
+                setSaved(false);
+            }
+            setAttendanceMap(initialMap);
+        } catch(e) { console.error(e); }
     };
-    fetchStudentsAndAttendance();
-  }, [currentUser, currentAssignment, selectedDate]);
+    fetchRecord();
+  }, [selectedGrade, selectedClass, selectedDate, currentStudents]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setAttendanceMap(prev => ({ ...prev, [studentId]: status }));
@@ -75,23 +119,23 @@ const Attendance: React.FC = () => {
   const markAll = (status: AttendanceStatus) => {
     if (window.confirm(status === AttendanceStatus.ABSENT ? 'هل أنت متأكد من تغييب جميع الطلاب؟' : 'هل تريد تحضير الجميع؟')) {
        const newMap: Record<string, AttendanceStatus> = {};
-       students.forEach(s => newMap[s.id] = status);
+       currentStudents.forEach(s => newMap[s.id] = status);
        setAttendanceMap(newMap);
        setSaved(false);
     }
   };
 
   const handleSave = async () => {
-    if (!currentUser || !currentAssignment) return;
+    if (!currentUser || !selectedGrade || !selectedClass) return;
     setSaving(true);
     try {
       const record: AttendanceRecord = {
         id: '', 
         date: selectedDate,
-        grade: currentAssignment.grade,
-        className: currentAssignment.className,
+        grade: selectedGrade,
+        className: selectedClass,
         staffId: currentUser.id,
-        records: students.map(s => ({
+        records: currentStudents.map(s => ({
           studentId: s.studentId,
           studentName: s.name,
           status: attendanceMap[s.id] || AttendanceStatus.PRESENT
@@ -107,22 +151,22 @@ const Attendance: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const total = students.length;
     const values = Object.values(attendanceMap);
-    const presentCount = values.filter(s => s === AttendanceStatus.PRESENT).length;
-    const absentCount = values.filter(s => s === AttendanceStatus.ABSENT).length;
-    const lateCount = values.filter(s => s === AttendanceStatus.LATE).length;
-    return { present: presentCount, absent: absentCount, late: lateCount };
-  }, [attendanceMap, students.length]);
+    return { 
+        present: values.filter(s => s === AttendanceStatus.PRESENT).length,
+        absent: values.filter(s => s === AttendanceStatus.ABSENT).length,
+        late: values.filter(s => s === AttendanceStatus.LATE).length
+    };
+  }, [attendanceMap]);
 
   if (!currentUser) return null;
 
   return (
-    <div className="pb-32 animate-fade-in relative max-w-3xl mx-auto">
+    <div className="pb-32 animate-fade-in relative max-w-4xl mx-auto">
       {/* Sticky Header */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100 p-4 rounded-b-3xl -mx-4 md:mx-0 md:rounded-3xl mb-6">
-        <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+            <div className="flex items-center gap-2 w-full md:w-auto">
                 <div className="bg-blue-100 p-2 rounded-xl text-blue-600"><ListChecks size={20}/></div>
                 <div>
                     <h1 className="text-lg font-bold text-slate-800">رصد الحضور</h1>
@@ -131,16 +175,16 @@ const Attendance: React.FC = () => {
             </div>
             
             {/* Quick Stats */}
-            <div className="flex gap-2">
-                <div className="text-center px-3 py-1 bg-emerald-50 rounded-lg border border-emerald-100">
+            <div className="flex gap-2 w-full md:w-auto justify-center">
+                <div className="text-center px-4 py-1 bg-emerald-50 rounded-lg border border-emerald-100">
                     <span className="block text-lg font-bold text-emerald-600 leading-none">{stats.present}</span>
                     <span className="text-[9px] text-emerald-400">حاضر</span>
                 </div>
-                <div className="text-center px-3 py-1 bg-red-50 rounded-lg border border-red-100">
+                <div className="text-center px-4 py-1 bg-red-50 rounded-lg border border-red-100">
                     <span className="block text-lg font-bold text-red-600 leading-none">{stats.absent}</span>
                     <span className="text-[9px] text-red-400">غائب</span>
                 </div>
-                <div className="text-center px-3 py-1 bg-amber-50 rounded-lg border border-amber-100">
+                <div className="text-center px-4 py-1 bg-amber-50 rounded-lg border border-amber-100">
                     <span className="block text-lg font-bold text-amber-600 leading-none">{stats.late}</span>
                     <span className="text-[9px] text-amber-400">متأخر</span>
                 </div>
@@ -148,26 +192,39 @@ const Attendance: React.FC = () => {
         </div>
 
         {/* Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="flex gap-2">
-                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 w-full outline-none focus:ring-2 focus:ring-blue-100"/>
-                {currentUser.assignments && currentUser.assignments.length > 0 && (
-                    <div className="relative w-full">
-                        <select
-                            value={currentAssignment ? JSON.stringify(currentAssignment) : ''}
-                            onChange={(e) => setCurrentAssignment(JSON.parse(e.target.value))}
-                            className="w-full appearance-none bg-blue-50 border border-blue-100 text-blue-900 font-bold py-2 px-4 rounded-xl text-sm outline-none"
-                        >
-                            {currentUser.assignments.map((assign, idx) => (
-                            <option key={idx} value={JSON.stringify(assign)}>{assign.grade} - {assign.className}</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" size={16} />
-                    </div>
-                )}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-3">
+                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 w-full outline-none focus:ring-2 focus:ring-blue-100"/>
+            </div>
+            <div className="md:col-span-3">
+                <div className="relative">
+                    <select 
+                        value={selectedGrade} 
+                        onChange={(e) => { setSelectedGrade(e.target.value); setSelectedClass(''); }} 
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-bold py-2.5 px-4 rounded-xl text-sm outline-none appearance-none"
+                    >
+                        <option value="">اختر الصف</option>
+                        {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                </div>
+            </div>
+            <div className="md:col-span-3">
+                <div className="relative">
+                    <select 
+                        value={selectedClass} 
+                        onChange={(e) => setSelectedClass(e.target.value)} 
+                        disabled={!selectedGrade}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-bold py-2.5 px-4 rounded-xl text-sm outline-none appearance-none disabled:opacity-50"
+                    >
+                        <option value="">اختر الفصل</option>
+                        {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="md:col-span-3 flex gap-1">
                 <button onClick={() => markAll(AttendanceStatus.PRESENT)} className="flex-1 bg-emerald-50 text-emerald-700 py-2 rounded-xl text-xs font-bold border border-emerald-100 hover:bg-emerald-100">تحضير الكل</button>
                 <button onClick={() => markAll(AttendanceStatus.ABSENT)} className="flex-1 bg-red-50 text-red-700 py-2 rounded-xl text-xs font-bold border border-red-100 hover:bg-red-100">تغييب الكل</button>
             </div>
@@ -175,19 +232,26 @@ const Attendance: React.FC = () => {
       </div>
 
       {/* Student List */}
-      {loadingStudents ? (
+      {loading ? (
          <div className="py-20 text-center text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200 mx-4 md:mx-0">
              <Loader2 className="mx-auto mb-4 animate-spin" size={32} />
-             <p className="font-bold">جاري تحميل القائمة...</p>
+             <p className="font-bold">جاري تحميل البيانات...</p>
          </div>
-      ) : students.length === 0 ? (
-         <div className="py-20 text-center text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200 mx-4 md:mx-0">
-             <Users className="mx-auto mb-4 opacity-50" size={48} />
-             <p className="font-bold">لا يوجد طلاب مسجلين</p>
+      ) : !selectedGrade || !selectedClass ? (
+         <div className="py-12 text-center text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200 mx-4 md:mx-0 p-6">
+             <Filter className="mx-auto mb-4 text-blue-300" size={48} />
+             <p className="font-bold text-lg mb-2">يرجى اختيار الصف والفصل</p>
+             <p className="text-sm">للبدء في رصد الحضور</p>
+         </div>
+      ) : currentStudents.length === 0 ? (
+         <div className="py-12 text-center text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200 mx-4 md:mx-0 p-6">
+             <AlertTriangle className="mx-auto mb-4 text-amber-400" size={48} />
+             <p className="font-bold text-lg mb-2">لا توجد بيانات طلاب</p>
+             <p className="text-sm">لا يوجد طلاب مسجلين في هذا الفصل في قاعدة البيانات.</p>
          </div>
       ) : (
          <div className="grid gap-3 mx-4 md:mx-0">
-            {students.map(student => {
+            {currentStudents.map(student => {
                 const status = attendanceMap[student.id];
                 return (
                   <div key={student.id} className={`bg-white p-4 rounded-2xl border-2 transition-all flex flex-col justify-between gap-4 shadow-sm
@@ -241,7 +305,7 @@ const Attendance: React.FC = () => {
       <div className="fixed bottom-6 left-0 right-0 p-4 flex justify-center z-40 pointer-events-none">
          <button 
            onClick={handleSave}
-           disabled={saving || students.length === 0}
+           disabled={saving || currentStudents.length === 0}
            className={`pointer-events-auto flex items-center gap-3 bg-slate-900 text-white px-8 py-4 rounded-full font-bold shadow-2xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-70 disabled:transform-none w-full max-w-sm justify-center border-4 border-white/20 backdrop-blur-sm
              ${saved ? 'bg-emerald-600' : ''}
            `}

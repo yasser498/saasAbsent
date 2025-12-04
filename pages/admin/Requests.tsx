@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Check, X, Eye, Calendar, Filter, MessageCircle, Sparkles, Loader2, Copy, Search, MoreHorizontal, FileText, User, RefreshCw, History, ChevronDown, ChevronUp, BrainCircuit, Send, Paperclip, School, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { getRequests, updateRequestStatus, getStudentAttendanceHistory, generateSmartContent, sendAdminInsight } from '../../services/storage';
@@ -152,7 +151,7 @@ const Requests: React.FC = () => {
   return (
     <div className="space-y-8 pb-12 animate-fade-in">
       {/* Header & Controls */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-6">
+      <div className="sticky top-0 z-30 no-print bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-blue-900">إدارة طلبات الأعذار</h1>

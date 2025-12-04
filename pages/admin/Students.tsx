@@ -47,6 +47,12 @@ const Students: React.FC = () => {
 
   useEffect(() => { fetchStudents(); }, []);
 
+  // Union of standard grades and existing custom grades from DB
+  const allGrades = useMemo(() => {
+      const dbGrades = new Set(students.map(s => s.grade));
+      return Array.from(new Set([...GRADES, ...Array.from(dbGrades)])).sort();
+  }, [students]);
+
   const handleRefresh = () => fetchStudents(true);
 
   const filteredStudents = useMemo(() => {
@@ -318,7 +324,7 @@ const Students: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in relative pb-20">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+      <div className="sticky top-0 z-30 no-print flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
             <h1 className="text-2xl font-bold text-blue-900 flex items-center gap-2">
                 <UserCheck className="text-emerald-500"/> إدارة الطلاب
@@ -461,7 +467,7 @@ const Students: React.FC = () => {
                     <div>
                        <label className={labelClasses}>الصف الدراسي</label>
                        <select value={formData.grade} onChange={e => setFormData({...formData, grade: e.target.value})} className={inputClasses}>
-                          {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                          {allGrades.map(g => <option key={g} value={g}>{g}</option>)}
                        </select>
                     </div>
                     <div>

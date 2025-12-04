@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { School, CheckSquare, Square, Save, Loader2, BookOpen, Trash2, Plus } from 'lucide-react';
-import { updateStaffUser, getAvailableClassesForGrade } from '../../services/storage';
-import { StaffUser, ClassAssignment } from '../../types';
-import { GRADES } from '../../constants';
+import { updateStaffUser, getAvailableClassesForGrade, getStudents } from '../../services/storage';
+import { StaffUser, ClassAssignment, Student } from '../../types';
 
 const ClassManagement: React.FC = () => {
   const navigate = useNavigate();
@@ -13,12 +12,15 @@ const ClassManagement: React.FC = () => {
   
   // New Assignment Form State
   const [subjectName, setSubjectName] = useState('');
-  const [selectedGrade, setSelectedGrade] = useState(GRADES[0]);
+  const [selectedGrade, setSelectedGrade] = useState('');
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]); // Classes selected for current subject
   
   const [loading, setLoading] = useState(false);
   const [loadingClasses, setLoadingClasses] = useState(false);
+  
+  // Dynamic Data
+  const [students, setStudents] = useState<Student[]>([]);
 
   useEffect(() => {
     const session = localStorage.getItem('ozr_staff_session');
@@ -26,9 +28,21 @@ const ClassManagement: React.FC = () => {
     const u = JSON.parse(session);
     setUser(u);
     setAssignments(u.assignments || []);
+    
+    // Fetch students to determine available grades
+    getStudents().then(setStudents);
   }, [navigate]);
 
+  const uniqueGrades = useMemo(() => {
+      const grades = new Set(students.map(s => s.grade));
+      return Array.from(grades).sort();
+  }, [students]);
+
   useEffect(() => {
+    if (!selectedGrade) {
+        setAvailableClasses([]);
+        return;
+    }
     const loadClasses = async () => {
       setLoadingClasses(true);
       try {
@@ -127,42 +141,48 @@ const ClassManagement: React.FC = () => {
 
             <div>
                 <label className="block text-sm font-bold text-slate-500 mb-2">2. اختر المرحلة الدراسية</label>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                    {GRADES.map(g => (
-                        <button 
-                            key={g} 
-                            onClick={() => setSelectedGrade(g)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${selectedGrade === g ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}
-                        >
-                            {g}
-                    </button>
-                    ))}
-                </div>
-            </div>
-
-            <div>
-                <label className="block text-sm font-bold text-slate-500 mb-2">3. حدد الفصول لهذه المادة</label>
-                {loadingClasses ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : (
-                    <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                        {availableClasses.map(cls => {
-                            const isSelected = selectedClasses.includes(cls);
-                            return (
-                                <button
-                                    key={cls}
-                                    onClick={() => toggleClassSelection(cls)}
-                                    className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-white text-slate-500 hover:border-emerald-200'}`}
-                                >
-                                    {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
-                                    <span className="font-bold text-sm">{cls}</span>
-                                </button>
-                            );
-                        })}
-                        {availableClasses.length === 0 && <p className="col-span-full text-center text-slate-400 text-xs">لا توجد فصول مسجلة لهذا الصف.</p>}
+                {uniqueGrades.length === 0 ? (
+                    <p className="text-xs text-slate-400">لا يوجد بيانات طلاب في قاعدة البيانات. يرجى إضافة طلاب أولاً.</p>
+                ) : (
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                        {uniqueGrades.map(g => (
+                            <button 
+                                key={g} 
+                                onClick={() => setSelectedGrade(g)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${selectedGrade === g ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}
+                            >
+                                {g}
+                        </button>
+                        ))}
                     </div>
                 )}
             </div>
 
-            <button onClick={addAssignments} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20">
+            {selectedGrade && (
+                <div>
+                    <label className="block text-sm font-bold text-slate-500 mb-2">3. حدد الفصول لهذه المادة</label>
+                    {loadingClasses ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : (
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                            {availableClasses.map(cls => {
+                                const isSelected = selectedClasses.includes(cls);
+                                return (
+                                    <button
+                                        key={cls}
+                                        onClick={() => toggleClassSelection(cls)}
+                                        className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-white text-slate-500 hover:border-emerald-200'}`}
+                                    >
+                                        {isSelected ? <CheckSquare size={20}/> : <Square size={20}/>}
+                                        <span className="font-bold text-sm">{cls}</span>
+                                    </button>
+                                );
+                            })}
+                            {availableClasses.length === 0 && <p className="col-span-full text-center text-slate-400 text-xs">لا توجد فصول مسجلة لهذا الصف.</p>}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <button onClick={addAssignments} disabled={!selectedGrade} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 disabled:opacity-50">
                 إضافة للقائمة
             </button>
         </div>

@@ -216,7 +216,7 @@ const Dashboard: React.FC = () => {
     <div className="space-y-8 pb-20 relative font-sans bg-slate-50 min-h-screen">
       
       {/* 1. HEADER */}
-      <header className="bg-white relative z-40 border-b border-slate-100 px-6 py-5 flex flex-col md:flex-row justify-between items-center gap-4">
+      <header className="bg-white sticky top-0 z-40 no-print border-b border-slate-100 px-6 py-5 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4 w-full md:w-auto">
               <div className="bg-slate-900 text-white p-3 rounded-2xl shadow-lg shadow-slate-900/20"><LayoutGrid size={24} /></div>
               <div><h1 className="text-xl font-extrabold text-slate-900">مركز القيادة</h1><p className="text-xs text-slate-500 font-bold">لوحة التحكم المركزية - {schoolName}</p></div>

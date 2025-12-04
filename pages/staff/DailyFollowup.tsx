@@ -6,7 +6,7 @@ import {
   Zap, AlertCircle, Clock, CheckSquare, RotateCcw, Tag, MoreHorizontal, 
   ChevronDown, ChevronUp, Mic, Image as ImageIcon, Users, LayoutGrid, 
   List, Medal, Timer, Shuffle, Volume2, Plus, Trash2, Camera, MapPin,
-  Sparkles, X, GraduationCap, ArrowRight, PenTool, Lock
+  Sparkles, X, GraduationCap, ArrowRight, PenTool, Lock, Wand2, BarChart2
 } from 'lucide-react';
 import { getStudents, saveClassPerformance, getClassPerformance, addStudentPoints, getAttendanceRecordForClass, generateSmartContent } from '../../services/storage';
 import { Student, StaffUser, ClassPerformance, ClassAssignment, AttendanceStatus } from '../../types';
@@ -38,14 +38,16 @@ const DailyFollowup: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<StaffUser | null>(null);
   
-  // Selection State
-  const [selectedClassId, setSelectedClassId] = useState<string>(''); // Combined grade|className
+  // Selection State (Updated to split Grade/Class)
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [students, setStudents] = useState<Student[]>([]);
   
   // Data States
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [currentStudents, setCurrentStudents] = useState<Student[]>([]);
   const [performanceData, setPerformanceData] = useState<Record<string, { participation: number, homework: boolean, note: string, badges: string[] }>>({});
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({});
   
@@ -57,8 +59,9 @@ const DailyFollowup: React.FC = () => {
   const [showTools, setShowTools] = useState(false);
   
   // Lesson Documentation
-  const [lessonTopic, setLessonTopic] = useState(''); // Lesson Topic (Mandatory)
-  const [lessonImage, setLessonImage] = useState<string | null>(null); // Base64
+  const [lessonTopic, setLessonTopic] = useState(''); 
+  const [smartTags, setSmartTags] = useState<string[]>([]);
+  const [generatingTags, setGeneratingTags] = useState(false);
   
   // Groups
   const [groups, setGroups] = useState<StudentGroup[]>([]);
@@ -90,63 +93,65 @@ const DailyFollowup: React.FC = () => {
     if (!session) { navigate('/staff/login'); return; }
     const u = JSON.parse(session);
     setUser(u);
-    // Initial Selection logic if assignments exist
-    if (u.assignments && u.assignments.length > 0) {
-        const first = u.assignments[0];
-        setSelectedClassId(`${first.grade}|${first.className}`);
-        if (first.subject) setSelectedSubject(first.subject);
-    }
+    
+    // Initial fetch of all students
+    getStudents().then(data => {
+        setAllStudents(data);
+        // Try auto-select based on assignment
+        if (u.assignments && u.assignments.length > 0) {
+            const first = u.assignments[0];
+            // Verify if this grade exists in DB to be safe
+            if (data.some((s: Student) => s.grade === first.grade)) {
+                setSelectedGrade(first.grade);
+                setSelectedClass(first.className);
+                if (first.subject) setSelectedSubject(first.subject);
+            }
+        }
+    });
   }, [navigate]);
 
-  // Derived Lists
-  const uniqueClasses = useMemo(() => {
-      if (!user?.assignments) return [];
-      const seen = new Set();
-      return user.assignments.filter(a => {
-          const key = `${a.grade}|${a.className}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-      });
-  }, [user]);
+  // --- Dynamic Filtering Logic ---
+  const uniqueGrades = useMemo(() => {
+      const grades = new Set(allStudents.map(s => s.grade));
+      return Array.from(grades).sort();
+  }, [allStudents]);
+
+  const availableClasses = useMemo(() => {
+      if (!selectedGrade) return [];
+      const classes = new Set(allStudents.filter(s => s.grade === selectedGrade).map(s => s.className));
+      return Array.from(classes).sort();
+  }, [allStudents, selectedGrade]);
 
   const availableSubjects = useMemo(() => {
-      if (!selectedClassId || !user?.assignments) return [];
-      const [grade, className] = selectedClassId.split('|');
-      // Filter assignments matching this class
-      const matches = user.assignments.filter(a => a.grade === grade && a.className === className);
-      // Extract unique subjects
-      return Array.from(new Set(matches.map(a => a.subject).filter(Boolean))) as string[];
-  }, [selectedClassId, user]);
+      if (!user?.assignments) return ['عام', 'لغتي', 'رياضيات', 'علوم', 'دين', 'إنجليزي']; // Fallbacks
+      // Filter assignments matching this class to find subjects
+      const matches = user.assignments.filter(a => a.grade === selectedGrade && a.className === selectedClass);
+      const subjects = Array.from(new Set(matches.map(a => a.subject).filter(Boolean))) as string[];
+      return subjects.length > 0 ? subjects : ['عام'];
+  }, [selectedGrade, selectedClass, user]);
 
   // Main Data Loader
   useEffect(() => {
-    if (!selectedClassId || !user) return;
-    const [grade, className] = selectedClassId.split('|');
+    if (!selectedGrade || !selectedClass || !user) return;
 
     const loadData = async () => {
       setLoading(true);
       try {
-        const [allStudents, savedPerf, attRecord] = await Promise.all([
-            getStudents(),
-            getClassPerformance(date, grade, className),
-            getAttendanceRecordForClass(date, grade, className)
+        const [savedPerf, attRecord] = await Promise.all([
+            getClassPerformance(date, selectedGrade, selectedClass),
+            getAttendanceRecordForClass(date, selectedGrade, selectedClass)
         ]);
         
-        const classStudents = allStudents.filter(s => s.grade === grade && s.className === className);
-        setStudents(classStudents);
+        const filteredStudents = allStudents.filter(s => s.grade === selectedGrade && s.className === selectedClass);
+        setCurrentStudents(filteredStudents);
 
         // --- Load Lesson Info ---
-        // If subject is selected, filter perf records by it
-        // We prioritize saved topic if exists for this subject/date
         if (savedPerf && savedPerf.length > 0) {
-            // Find record matching current subject if selected, else take first
             const relevantRecord = selectedSubject 
                 ? savedPerf.find((p: any) => p.subject === selectedSubject) 
                 : savedPerf[0];
             
             if (relevantRecord && relevantRecord.behaviorNote) {
-                 // Try extract Topic from note if stored there
                  const topicMatch = relevantRecord.behaviorNote.match(/\[درس: (.*?)\]/);
                  if (topicMatch) setLessonTopic(topicMatch[1]);
                  else setLessonTopic('');
@@ -158,10 +163,10 @@ const DailyFollowup: React.FC = () => {
         }
 
         // Init Groups
-        if (groups.length === 0) {
+        if (groups.length === 0 && filteredStudents.length > 0) {
             const groupNames = ['الصقور', 'النجوم', 'العباقرة', 'المستقبل'];
             const newGroups: StudentGroup[] = groupNames.map((name, idx) => ({ id: `g-${idx}`, name, members: [] }));
-            classStudents.forEach((s, i) => {
+            filteredStudents.forEach((s, i) => {
                 newGroups[i % newGroups.length].members.push(s.id);
             });
             setGroups(newGroups);
@@ -176,8 +181,7 @@ const DailyFollowup: React.FC = () => {
 
         // Map Performance
         const initialData: any = {};
-        classStudents.forEach(s => {
-            // Filter by subject if selected
+        filteredStudents.forEach(s => {
             const saved = savedPerf.find((p: any) => p.studentId === s.studentId && (!selectedSubject || p.subject === selectedSubject));
             initialData[s.id] = {
                 participation: saved ? saved.participationScore : 0,
@@ -189,8 +193,8 @@ const DailyFollowup: React.FC = () => {
         setPerformanceData(initialData);
 
         // AI Spotlight
-        if (classStudents.length > 0) {
-            const randomStudent = classStudents[Math.floor(Math.random() * classStudents.length)];
+        if (filteredStudents.length > 0) {
+            const randomStudent = filteredStudents[Math.floor(Math.random() * filteredStudents.length)];
             setAiSuggestion({
                 studentId: randomStudent.id,
                 reason: `الطالب ${randomStudent.name} أداؤه مستقر، جرب توجيه سؤال صعب له اليوم.`
@@ -201,13 +205,13 @@ const DailyFollowup: React.FC = () => {
       finally { setLoading(false); }
     };
     loadData();
-  }, [selectedClassId, selectedSubject, date, user]);
+  }, [selectedGrade, selectedClass, selectedSubject, date, user, allStudents]);
 
   // --- Stats Calculation ---
   const stats = useMemo(() => {
       const presentCount = Object.values(attendanceMap).filter(s => s === AttendanceStatus.PRESENT).length;
-      const totalStars = Object.values(performanceData).reduce((sum, d) => sum + d.participation, 0);
-      const evaluatedCount = Object.values(performanceData).filter(d => d.participation > 0 || d.homework).length;
+      const totalStars = Object.values(performanceData).reduce((sum, d: any) => sum + (d.participation || 0), 0);
+      const evaluatedCount = Object.values(performanceData).filter((d: any) => d.participation > 0 || d.homework).length;
       return { presentCount, totalStars, evaluatedCount };
   }, [attendanceMap, performanceData]);
 
@@ -236,7 +240,7 @@ const DailyFollowup: React.FC = () => {
       setPerformanceData(prev => {
           const newState = { ...prev };
           group.members.forEach(mId => {
-              if (attendanceMap[students.find(s=>s.id===mId)?.studentId || ''] !== AttendanceStatus.ABSENT) {
+              if (attendanceMap[currentStudents.find(s=>s.id===mId)?.studentId || ''] !== AttendanceStatus.ABSENT) {
                   newState[mId] = { ...newState[mId], [field]: value };
               }
           });
@@ -245,17 +249,14 @@ const DailyFollowup: React.FC = () => {
   };
 
   const handleSave = async () => {
-      if (!selectedClassId || !user) return;
+      if (!selectedGrade || !selectedClass || !user) return;
       if (!selectedSubject) { alert("يرجى اختيار المادة."); return; }
       if (!lessonTopic.trim()) { alert("عنوان الدرس إلزامي لتوثيق الحصة."); return; }
 
       setSaving(true);
       try {
-          const [grade, className] = selectedClassId.split('|');
-          
-          const records: ClassPerformance[] = students.map(s => {
+          const records: ClassPerformance[] = currentStudents.map(s => {
               const data = performanceData[s.id];
-              // Format note to include topic and badges for legacy display support
               let finalNote = data.note;
               finalNote = `[درس: ${lessonTopic}] ${finalNote}`;
               if (data.badges.length > 0) finalNote = `${finalNote} [أوسمة: ${data.badges.map(b => BADGES.find(x=>x.id===b)?.label).join(', ')}]`;
@@ -264,8 +265,8 @@ const DailyFollowup: React.FC = () => {
                   id: '',
                   studentId: s.studentId,
                   studentName: s.name,
-                  grade: grade,
-                  className: className,
+                  grade: selectedGrade,
+                  className: selectedClass,
                   date,
                   subject: selectedSubject, 
                   participationScore: data.participation,
@@ -281,9 +282,47 @@ const DailyFollowup: React.FC = () => {
       finally { setSaving(false); }
   };
 
-  // --- Tools Logic (Timer, Noise, Random) remains same ---
-  // ... (Keeping existing implementation for brevity) ...
-  // Timer
+  // --- SMART TAGS LOGIC ---
+  const generateSmartTags = async () => {
+      if(!lessonTopic) return;
+      setGeneratingTags(true);
+      try {
+          const prompt = `
+          Generate 5 short, distinct, positive or neutral classroom observation tags (max 3 words each, in Arabic) 
+          relevant for a student attending a class about "${lessonTopic}".
+          Return ONLY a JSON array of strings. Example: ["Solved math problem", "Participated in reading"]
+          `;
+          const res = await generateSmartContent(prompt);
+          try {
+              const tags = JSON.parse(res.replace(/```json|```/g, '').trim());
+              setSmartTags(tags);
+          } catch(e) {
+              setSmartTags(['تفاعل ممتاز', 'أجاب بذكاء', 'انتبه للشرح']); // Fallback
+          }
+      } catch(e) { console.error(e); }
+      finally { setGeneratingTags(false); }
+  };
+
+  const generateSessionAnalysis = async () => {
+      if(stats.evaluatedCount < 3) { alert("البيانات قليلة جداً للتحليل"); return; }
+      setLoading(true);
+      try {
+          const prompt = `
+          Analyze this class session:
+          - Topic: ${lessonTopic}
+          - Total Students: ${currentStudents.length}
+          - Present: ${stats.presentCount}
+          - Active Participants (Stars > 0): ${stats.evaluatedCount}
+          - Total Stars Given: ${stats.totalStars}
+          
+          Give a 2 sentence summary for the teacher about the engagement level.
+          `;
+          const res = await generateSmartContent(prompt);
+          alert(res);
+      } catch(e) { alert("Error"); } finally { setLoading(false); }
+  };
+
+  // --- Tools Logic ---
   useEffect(() => {
       if (isTimerRunning && timerVal > 0) {
           timerRef.current = setInterval(() => setTimerVal(prev => prev - 1), 1000);
@@ -324,7 +363,7 @@ const DailyFollowup: React.FC = () => {
   };
 
   const pickRandom = () => {
-      const presentStudents = students.filter(s => attendanceMap[s.studentId] !== AttendanceStatus.ABSENT);
+      const presentStudents = currentStudents.filter(s => attendanceMap[s.studentId] !== AttendanceStatus.ABSENT);
       if (presentStudents.length === 0) return;
       let count = 0;
       const interval = setInterval(() => {
@@ -356,7 +395,7 @@ const DailyFollowup: React.FC = () => {
       let action: any = null;
       for (const [key, val] of Object.entries(keywords)) { if (text.includes(key)) action = val; }
       if (!action) { alert("لم يتم التعرف على الأمر."); return; }
-      const matchedStudents = students.filter(s => text.includes(s.name.split(' ')[0])); 
+      const matchedStudents = currentStudents.filter(s => text.includes(s.name.split(' ')[0])); 
       if (matchedStudents.length === 1) {
           const s = matchedStudents[0];
           if (action.field) updateStudentData(s.id, action.field, action.value);
@@ -369,41 +408,50 @@ const DailyFollowup: React.FC = () => {
   return (
     <div className="space-y-6 pb-28 animate-fade-in max-w-6xl mx-auto">
         
-        {/* --- TOP BAR: SELECTION --- */}
+        {/* --- TOP BAR: DYNAMIC FILTERING --- */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-6">
             <div className="flex flex-col md:flex-row gap-4 w-full lg:w-auto items-center">
                 
-                {/* 1. Class Selector */}
-                <div className="relative group w-full md:w-48">
+                {/* 1. Grade Selector */}
+                <div className="relative group w-full md:w-40">
                     <GraduationCap className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" size={20} />
                     <select
-                        value={selectedClassId}
-                        onChange={(e) => { setSelectedClassId(e.target.value); setSelectedSubject(''); }}
+                        value={selectedGrade}
+                        onChange={(e) => { setSelectedGrade(e.target.value); setSelectedClass(''); }}
                         className="w-full appearance-none bg-slate-50 border-2 border-slate-200 text-slate-800 font-bold py-3 pr-10 pl-4 rounded-2xl outline-none focus:border-indigo-500 transition-all cursor-pointer hover:bg-white text-sm"
                     >
-                        <option value="">اختر الفصل</option>
-                        {uniqueClasses.map((assign, idx) => (
-                            <option key={idx} value={`${assign.grade}|${assign.className}`}>
-                                {assign.grade} - {assign.className}
-                            </option>
-                        ))}
+                        <option value="">الصف</option>
+                        {uniqueGrades.map((g, idx) => <option key={idx} value={g}>{g}</option>)}
                     </select>
                     <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 </div>
 
-                {/* 2. Subject Selector */}
-                <div className="relative group w-full md:w-48">
+                {/* 2. Class Selector */}
+                <div className="relative group w-full md:w-40">
+                    <Users className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" size={20} />
+                    <select
+                        value={selectedClass}
+                        onChange={(e) => setSelectedClass(e.target.value)}
+                        disabled={!selectedGrade}
+                        className="w-full appearance-none bg-slate-50 border-2 border-slate-200 text-slate-800 font-bold py-3 pr-10 pl-4 rounded-2xl outline-none focus:border-indigo-500 transition-all cursor-pointer hover:bg-white disabled:opacity-50 text-sm"
+                    >
+                        <option value="">الفصل</option>
+                        {availableClasses.map((c, idx) => <option key={idx} value={c}>{c}</option>)}
+                    </select>
+                    <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
+
+                {/* 3. Subject Selector */}
+                <div className="relative group w-full md:w-40">
                     <BookOpen className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none" size={20} />
                     <select
                         value={selectedSubject}
                         onChange={(e) => setSelectedSubject(e.target.value)}
-                        disabled={!selectedClassId}
+                        disabled={!selectedClass}
                         className="w-full appearance-none bg-slate-50 border-2 border-slate-200 text-slate-800 font-bold py-3 pr-10 pl-4 rounded-2xl outline-none focus:border-blue-500 transition-all cursor-pointer hover:bg-white disabled:opacity-50 text-sm"
                     >
-                        <option value="">اختر المادة</option>
-                        {availableSubjects.map((sub, idx) => (
-                            <option key={idx} value={sub}>{sub}</option>
-                        ))}
+                        <option value="">المادة</option>
+                        {availableSubjects.map((sub, idx) => <option key={idx} value={sub}>{sub}</option>)}
                     </select>
                     <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 </div>
@@ -433,7 +481,7 @@ const DailyFollowup: React.FC = () => {
             </div>
         </div>
 
-        {/* --- LESSON DOCUMENTATION (MANDATORY TOPIC) --- */}
+        {/* --- LESSON DOCUMENTATION & AI TAGS --- */}
         <div className="bg-gradient-to-r from-indigo-900 to-blue-900 p-6 rounded-[2rem] shadow-lg relative overflow-hidden text-white">
             <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
             
@@ -442,14 +490,25 @@ const DailyFollowup: React.FC = () => {
                     <label className="text-xs text-indigo-200 font-bold uppercase mb-1 flex items-center gap-1">
                         عنوان الدرس <span className="text-red-400 text-[10px] bg-red-900/50 px-2 rounded">إلزامي للتوثيق</span>
                     </label>
-                    <div className="relative">
-                        <input 
-                            value={lessonTopic} 
-                            onChange={e => setLessonTopic(e.target.value)} 
-                            placeholder="اكتب عنوان الدرس هنا لتفعيل الحفظ..." 
-                            className="text-xl font-bold text-white placeholder:text-indigo-300/50 bg-white/10 rounded-xl px-4 py-3 outline-none w-full border-2 border-indigo-400/30 focus:border-yellow-400 transition-colors shadow-inner"
-                        />
-                        {!lessonTopic && <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300" size={20}/>}
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                            <input 
+                                value={lessonTopic} 
+                                onChange={e => setLessonTopic(e.target.value)} 
+                                placeholder="اكتب عنوان الدرس هنا..." 
+                                className="text-xl font-bold text-white placeholder:text-indigo-300/50 bg-white/10 rounded-xl px-4 py-3 outline-none w-full border-2 border-indigo-400/30 focus:border-yellow-400 transition-colors shadow-inner"
+                            />
+                            {!lessonTopic && <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300" size={20}/>}
+                        </div>
+                        <button 
+                            onClick={generateSmartTags} 
+                            disabled={generatingTags || !lessonTopic}
+                            className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50"
+                            title="توليد وسوم ذكية بناءً على الموضوع"
+                        >
+                            {generatingTags ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}
+                            وسوم ذكية
+                        </button>
                     </div>
                 </div>
                 
@@ -494,6 +553,10 @@ const DailyFollowup: React.FC = () => {
                 <button onClick={startVoiceCommand} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${isVoiceListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
                     <Mic size={18}/> <span className="hidden sm:inline">{isVoiceListening ? 'استماع...' : 'أمر صوتي'}</span>
                 </button>
+                
+                <button onClick={generateSessionAnalysis} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-purple-50 text-purple-700 hover:bg-purple-100 transition-all">
+                    <BarChart2 size={18}/> تحليل الجلسة
+                </button>
             </div>
 
             <button 
@@ -534,7 +597,7 @@ const DailyFollowup: React.FC = () => {
                         {randomWinner ? randomWinner.name : '???'}
                     </div>
                     <button onClick={() => {
-                        let i = 0; const int = setInterval(() => { setRandomWinner(students[Math.floor(Math.random()*students.length)]); i++; if(i>15) clearInterval(int); }, 80);
+                        let i = 0; const int = setInterval(() => { setRandomWinner(currentStudents[Math.floor(Math.random()*currentStudents.length)]); i++; if(i>15) clearInterval(int); }, 80);
                     }} className="w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-transform active:scale-95">اختيار طالب</button>
                 </div>
 
@@ -572,17 +635,17 @@ const DailyFollowup: React.FC = () => {
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={40}/><p className="font-bold text-lg">جاري تحضير الفصل...</p>
                 </div>
-            ) : !selectedClassId ? (
+            ) : !selectedGrade || !selectedClass ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                     <BookOpen className="mb-4 opacity-50" size={64}/>
-                    <p className="font-bold text-lg">يرجى اختيار الفصل للبدء</p>
+                    <p className="font-bold text-lg">يرجى اختيار الصف والفصل للبدء</p>
                 </div>
             ) : (
                 <>
                     {/* LIST VIEW */}
                     {viewMode === 'list' && (
                         <div className="grid gap-3">
-                            {students.map(s => {
+                            {currentStudents.map(s => {
                                 const data = performanceData[s.id] || { participation: 0, homework: false, note: '', badges: [] };
                                 const isExpanded = activeNoteId === s.id;
                                 const isAbsent = attendanceMap[s.studentId] === AttendanceStatus.ABSENT;
@@ -618,11 +681,19 @@ const DailyFollowup: React.FC = () => {
                                                         </button>
                                                     ))}
                                                 </div>
+                                                
+                                                {/* Smart Tags Section */}
                                                 <div className="flex flex-wrap gap-2 mb-3">
+                                                    {smartTags.map((tag, i) => (
+                                                        <button key={`smart-${i}`} onClick={() => updateStudentData(s.id, 'note', (data.note ? data.note + ' - ' : '') + tag)} className="px-3 py-1.5 rounded-lg text-xs font-bold transition-transform hover:scale-105 bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1">
+                                                            <Sparkles size={10}/> {tag}
+                                                        </button>
+                                                    ))}
                                                     {QUICK_TAGS.map((t, i) => (
                                                         <button key={i} onClick={() => updateStudentData(s.id, 'note', (data.note ? data.note + ' - ' : '') + t.label)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-transform hover:scale-105 ${t.color}`}>{t.label}</button>
                                                     ))}
                                                 </div>
+                                                
                                                 <input value={data.note} onChange={e => updateStudentData(s.id, 'note', e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-indigo-300 outline-none" placeholder="ملاحظة يدوية..."/>
                                             </div>
                                         )}
@@ -638,7 +709,7 @@ const DailyFollowup: React.FC = () => {
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-4 bg-slate-300 rounded-b-xl shadow-md flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">منطقة السبورة</div>
                             
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
-                                {students.map(s => {
+                                {currentStudents.map(s => {
                                     const data = performanceData[s.id] || { participation: 0 };
                                     const isAbsent = attendanceMap[s.studentId] === AttendanceStatus.ABSENT;
                                     return (
@@ -675,7 +746,7 @@ const DailyFollowup: React.FC = () => {
                                     </div>
                                     <div className="p-5 grid grid-cols-2 gap-3">
                                         {g.members.map(mId => {
-                                            const st = students.find(s => s.id === mId);
+                                            const st = currentStudents.find(s => s.id === mId);
                                             if(!st) return null;
                                             const data = performanceData[st.id];
                                             const isAbsent = attendanceMap[st.studentId] === AttendanceStatus.ABSENT;

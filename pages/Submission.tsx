@@ -4,7 +4,6 @@ import * as ReactRouterDOM from 'react-router-dom';
 import { Upload, CheckCircle, Calendar, User, FileText, Sparkles, AlertCircle, ChevronRight, Home, Paperclip, CalendarDays, Clock, ArrowRight } from 'lucide-react';
 import { getStudents, addRequest, uploadFile, getActiveSchool } from '../services/storage';
 import { Student, ExcuseRequest, RequestStatus } from '../types';
-import { GRADES } from '../constants';
 
 const { useNavigate, useSearchParams } = ReactRouterDOM as any;
 
@@ -46,6 +45,11 @@ const Submission: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  const uniqueGrades = useMemo(() => {
+    const grades = new Set(students.map(s => s.grade));
+    return Array.from(grades).sort();
+  }, [students]);
 
   const availableClasses = useMemo(() => {
     if (!selectedGrade) return [];
@@ -228,7 +232,7 @@ const Submission: React.FC = () => {
                                     <label className="text-xs font-bold text-slate-500 mb-1.5 block">الصف الدراسي</label>
                                     <select required value={selectedGrade} onChange={(e) => { setSelectedGrade(e.target.value); setSelectedClass(''); setSelectedStudentId(''); }} className="w-full p-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                         <option value="">اختر الصف</option>
-                                        {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                                        {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
                                     </select>
                                 </div>
                                 <div>

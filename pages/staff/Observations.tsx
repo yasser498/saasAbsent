@@ -4,27 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Edit, Trash2, Printer, Loader2, FileText, School, User, Calendar, Sparkles, Trophy, Wand2, MessageCircle, X, Check, Filter } from 'lucide-react';
 import { getStudents, addStudentObservation, getStudentObservations, updateStudentObservation, deleteStudentObservation, analyzeSentiment, addStudentPoints, generateSmartContent, acknowledgeObservation } from '../../services/storage';
 import { Student, StaffUser, StudentObservation } from '../../types';
-import { GRADES } from '../../constants';
-
-// Official Print Header Component
-const OfficialHeader = ({ schoolName, subTitle }: { schoolName: string, subTitle: string }) => (
-  <div className="print-header">
-    <div className="print-header-right">
-        <p>المملكة العربية السعودية</p>
-        <p>وزارة التعليم</p>
-        <p>{schoolName}</p>
-        <p>{subTitle}</p>
-    </div>
-    <div className="print-header-center">
-        <img src="https://www.raed.net/img?id=1474173" alt="شعار وزارة التعليم" className="print-logo" />
-    </div>
-    <div className="print-header-left">
-         <p>Kingdom of Saudi Arabia</p>
-         <p>Ministry of Education</p>
-         <p>Date: {new Date().toLocaleDateString('en-GB')}</p>
-    </div>
-  </div>
-);
+import PrintLayout from '../../components/PrintLayout';
 
 const StaffObservations: React.FC = () => {
   const navigate = useNavigate();
@@ -33,7 +13,6 @@ const StaffObservations: React.FC = () => {
   const [observations, setObservations] = useState<StudentObservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
-  const SCHOOL_NAME = localStorage.getItem('school_name') || "متوسطة عماد الدين زنكي";
 
   // Form State
   const [showModal, setShowModal] = useState(false);
@@ -44,6 +23,7 @@ const StaffObservations: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [obsType, setObsType] = useState<'academic' | 'behavioral' | 'positive' | 'general'>('general');
   const [obsContent, setObsContent] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
   
   // Reply Modal State
   const [showReplyModal, setShowReplyModal] = useState(false);
@@ -104,6 +84,12 @@ const StaffObservations: React.FC = () => {
       return observations.filter(o => o.date === reportDate);
   }, [observations, reportDate]);
 
+  // Derive Unique Grades from DB
+  const uniqueGrades = useMemo(() => {
+    const grades = new Set(students.map(s => s.grade));
+    return Array.from(grades).sort();
+  }, [students]);
+
   const availableClasses = useMemo(() => {
     if (!formGrade) return [];
     const classes = new Set(students.filter(s => s.grade === formGrade).map(s => s.className));
@@ -120,11 +106,24 @@ const StaffObservations: React.FC = () => {
     setFormGrade('');
     setFormClass('');
     setSelectedStudentId('');
+    setStudentSearch('');
     setObsType('general');
     setObsContent('');
     setShowModal(false);
     setSentiment(null);
     setPoints(0);
+  };
+
+  const handleStudentSearch = (term: string) => {
+      setStudentSearch(term);
+      if (term.length > 2) {
+          const found = students.find(s => s.name.includes(term) || s.studentId.includes(term));
+          if (found) {
+              setFormGrade(found.grade);
+              setFormClass(found.className);
+              setSelectedStudentId(found.id);
+          }
+      }
   };
 
   const handleEdit = (obs: StudentObservation) => {
@@ -253,14 +252,7 @@ const StaffObservations: React.FC = () => {
   return (
     <>
       <div id="print-area" className="hidden" dir="rtl">
-          <div className="print-page-a4">
-              <OfficialHeader schoolName={SCHOOL_NAME} subTitle="الملاحظات التربوية والسلوكية اليومية" />
-              
-              <div className="text-center mb-6">
-                  <h1 className="official-title">تقرير الملاحظات اليومي</h1>
-                  <p className="font-bold">التاريخ: {reportDate}</p>
-              </div>
-
+          <PrintLayout title={`تقرير الملاحظات اليومي - ${reportDate}`}>
               <table className="w-full text-right border-collapse border border-black text-sm mt-4">
                   <thead>
                       <tr className="bg-gray-100">
@@ -287,13 +279,7 @@ const StaffObservations: React.FC = () => {
                       )) : <tr><td colSpan={7} className="border p-4 text-center">لا توجد ملاحظات مسجلة لهذا اليوم</td></tr>}
                   </tbody>
               </table>
-
-              <div className="footer-signatures mt-12">
-                  <div className="signature-box"><p className="signature-title">الموجه الطلابي</p><p>.............................</p></div>
-                  <div className="signature-box"><p className="signature-title">وكيل شؤون الطلاب</p><p>.............................</p></div>
-                  <div className="signature-box"><p className="signature-title">مدير المدرسة</p><p>.............................</p></div>
-              </div>
-          </div>
+          </PrintLayout>
       </div>
 
       {/* Main UI */}
@@ -384,8 +370,23 @@ const StaffObservations: React.FC = () => {
                 {!isEditing && (
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
                     <label className="text-xs font-bold text-slate-400 uppercase">بيانات الطالب</label>
+                    
+                    {/* Search */}
+                    <div className="mb-2 relative">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                        <input 
+                            className="w-full p-2.5 pr-9 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-pink-100 outline-none"
+                            placeholder="بحث سريع عن طالب..."
+                            value={studentSearch}
+                            onChange={(e) => handleStudentSearch(e.target.value)}
+                        />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
-                        <select value={formGrade} onChange={e => { setFormGrade(e.target.value); setFormClass(''); }} className="w-full p-3 border-none rounded-xl bg-white text-sm font-bold shadow-sm focus:ring-2 focus:ring-pink-100 outline-none"><option value="">الصف</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}</select>
+                        <select value={formGrade} onChange={e => { setFormGrade(e.target.value); setFormClass(''); }} className="w-full p-3 border-none rounded-xl bg-white text-sm font-bold shadow-sm focus:ring-2 focus:ring-pink-100 outline-none">
+                            <option value="">الصف</option>
+                            {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
                         <select value={formClass} disabled={!formGrade} onChange={e => setFormClass(e.target.value)} className="w-full p-3 border-none rounded-xl bg-white text-sm font-bold shadow-sm focus:ring-2 focus:ring-pink-100 outline-none disabled:opacity-50"><option value="">الفصل</option>{availableClasses.map(c => <option key={c} value={c}>{c}</option>)}</select>
                     </div>
                     <select required value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)} className="w-full p-3 border-none rounded-xl bg-white text-sm font-bold shadow-sm focus:ring-2 focus:ring-pink-100 outline-none"><option value="">اختر الطالب...</option>{availableStudents.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>

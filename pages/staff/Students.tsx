@@ -4,7 +4,6 @@ import * as ReactRouterDOM from 'react-router-dom';
 import { Search, Phone, MessageCircle, X, Loader2, BookUser, Copy, Check, School, Smartphone, Inbox, LayoutGrid, HeartHandshake, UserPlus, Users, ArrowRight, ClipboardList, Send, FileText, Printer, Calendar, Plus, ShieldAlert, FileWarning, Eye, TrendingDown, Clock, AlertCircle, CheckCircle, ArrowLeft, RefreshCw, Activity, GitCommit, UserCheck, Sparkles, Archive, Wand2, Edit, Trash2, ListChecks, FileX } from 'lucide-react';
 import { getStudents, getStudentAttendanceHistory, getReferrals, updateReferralStatus, addGuidanceSession, getGuidanceSessions, getBehaviorRecords, getStudentObservations, getConsecutiveAbsences, generateGuidancePlan, generateSmartContent, updateGuidanceSession, deleteGuidanceSession, resolveAbsenceAlert, getRequests } from '../../services/storage';
 import { Student, StaffUser, AttendanceStatus, Referral, GuidanceSession, BehaviorRecord, StudentObservation, ExcuseRequest } from '../../types';
-import { GRADES } from '../../constants';
 
 const { useNavigate, useLocation } = ReactRouterDOM as any;
 
@@ -123,6 +122,12 @@ const StaffStudents: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [isDirectoryMode]);
+
+  // Derived Unique Grades based on DB
+  const uniqueGrades = useMemo(() => {
+    const grades = new Set(students.map(s => s.grade));
+    return Array.from(grades).sort();
+  }, [students]);
 
   // Directory Logic
   const availableClasses = useMemo(() => {
@@ -803,7 +808,7 @@ const StaffStudents: React.FC = () => {
                     <div className="flex gap-2 w-full md:w-auto">
                         <select value={filterGrade} onChange={e => { setFilterGrade(e.target.value); setFilterClass(''); }} className="bg-slate-50 border border-slate-200 py-2.5 px-4 rounded-xl text-sm font-bold text-slate-700 focus:outline-none">
                             <option value="">كل الصفوف</option>
-                            {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                            {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
                         </select>
                         <select value={filterClass} onChange={e => setFilterClass(e.target.value)} disabled={!filterGrade} className="bg-slate-50 border border-slate-200 py-2.5 px-4 rounded-xl text-sm font-bold text-slate-700 focus:outline-none disabled:opacity-50">
                             <option value="">{filterGrade ? 'كل الفصول' : '-'}</option>
@@ -873,7 +878,7 @@ const StaffStudents: React.FC = () => {
                 </div>
                 <div className="p-4 border-b border-slate-100 space-y-3 bg-white">
                     <div className="flex gap-3">
-                        <select value={filterGrade} onChange={e => { setFilterGrade(e.target.value); setFilterClass(''); }} className="w-1/2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none"><option value="">كل الصفوف</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}</select>
+                        <select value={filterGrade} onChange={e => { setFilterGrade(e.target.value); setFilterClass(''); }} className="w-1/2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none"><option value="">كل الصفوف</option>{uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}</select>
                         <select value={filterClass} onChange={e => setFilterClass(e.target.value)} disabled={!filterGrade} className="w-1/2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none disabled:opacity-50"><option value="">{filterGrade ? 'كل الفصول' : '-'}</option>{availableClasses.map(c => <option key={c} value={c}>{c}</option>)}</select>
                     </div>
                     <div className="relative"><Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input autoFocus placeholder="ابحث بالاسم..." className="w-full pr-12 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-100 transition-all font-bold text-slate-800" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/></div>

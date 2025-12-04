@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Search, UserCheck, School, X, CheckSquare, Square, Loader2, RefreshCw, Edit, KeyRound, ShieldCheck, ChevronRight, Check, Lock, Download, FileSpreadsheet, Briefcase } from 'lucide-react';
-import { getStaffUsersSync, getStaffUsers, addStaffUser, updateStaffUser, deleteStaffUser, getAvailableClassesForGrade } from '../../services/storage';
-import { StaffUser, ClassAssignment } from '../../types';
+import { getStaffUsersSync, getStaffUsers, addStaffUser, updateStaffUser, deleteStaffUser, getAvailableClassesForGrade, getStudents } from '../../services/storage';
+import { StaffUser, ClassAssignment, Student } from '../../types';
 import { GRADES, PERMISSIONS } from '../../constants';
 
 // Declare XLSX global
@@ -31,6 +31,9 @@ const Users: React.FC = () => {
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [selectedClassesForGrade, setSelectedClassesForGrade] = useState<string[]>([]);
   const [assignments, setAssignments] = useState<ClassAssignment[]>([]);
+  
+  // Dynamic Grades from DB
+  const [dbGrades, setDbGrades] = useState<string[]>([]);
 
   const fetchUsers = async () => {
     // Only show loading if we didn't have cache
@@ -47,6 +50,11 @@ const Users: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
+    // Fetch students to populate available grades dynamically
+    getStudents().then(students => {
+        const grades = new Set(students.map(s => s.grade));
+        setDbGrades(Array.from(grades).sort());
+    });
   }, []);
 
   // Fetch classes dynamically when grade changes
@@ -60,7 +68,7 @@ const Users: React.FC = () => {
       setLoadingClasses(true);
       try {
         const classes = await getAvailableClassesForGrade(selectedGrade);
-        setAvailableClasses(classes as string[]);
+        setAvailableClasses(classes as any as string[]);
       } catch (e) {
         console.error("Failed to load classes", e);
       } finally {
@@ -294,7 +302,7 @@ const Users: React.FC = () => {
     <div className="space-y-8 pb-12 animate-fade-in">
       
       {/* Header */}
-      <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+      <div className="sticky top-0 z-30 no-print bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-full bg-gradient-to-l from-blue-50 to-transparent pointer-events-none"></div>
         <div className="relative z-10">
           <h1 className="text-2xl md:text-3xl font-bold text-blue-900 flex items-center gap-3">
@@ -506,14 +514,14 @@ const Users: React.FC = () => {
                                     onClick={() => handleRoleChange('teacher')}
                                     className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${role === 'teacher' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
                                 >
-                                    <Briefcase size={20}/> كادر تعليمي (معلم)
+                                    <Briefcase size={20}/> الكادر التعليمي (معلم)
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => handleRoleChange('admin_staff')}
                                     className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${role === 'admin_staff' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
                                 >
-                                    <ShieldCheck size={20}/> كادر إداري (وكيل/مرشد)
+                                    <ShieldCheck size={20}/> الكادر الإداري (وكيل/مرشد)
                                 </button>
                             </div>
                         </div>
@@ -572,7 +580,7 @@ const Users: React.FC = () => {
                                     className={inputClasses}
                                     >
                                     <option value="">-- اختر الصف --</option>
-                                    {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                                    {dbGrades.map(g => <option key={g} value={g}>{g}</option>)}
                                     </select>
                                 </div>
                                 
